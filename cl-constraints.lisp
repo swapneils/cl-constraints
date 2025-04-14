@@ -25,6 +25,7 @@
 (defun* get-property (property (target (or symbol list)))
   (:returns map)
   (let* ((target-props (lookup *symbol-db* target))
+         (found-target (nth-value 1 (lookup *symbol-db* target)))
          (prop-defaults (lookup *defaults* property))
          (target-prop
            ;; If there's an explicit definition for this property,
@@ -44,8 +45,9 @@
         ;; Specific symbol
         (eql (first target) :symbol)
         ;; Symbol not found
-        (equal? target-prop (map)))
-       (setf target-prop (get-property property :symbol)))
+        (not found-target))
+       ;; Return the value for `:symbol'
+       (get-property property :symbol))
       ;; If no special case, merge with the defaults
       ;; to get the final config.
       (t (map ($ prop-defaults) ($ target-prop))))))
@@ -187,16 +189,16 @@ the properties and "
         (funcall report valid)
         (unless valid
           (case report
-            (:warn (warn "failed to constrain property ~A~%Form:~%~A~%Subforms with property as NIL:~%~{~A~%~}~%~%"
+            (:warn (warn "failed to constrain property ~A~%Form:~%~A~%Subforms with property not known to be true:~%~{~A~%~}~%"
                          property form
                          (convert 'list (filter (op (not _2)) *constraint-context*)
                                   :pair-fn (op _2 _1))))
-            (:error (error "failed to constrain property ~A~%Form:~%~A~%Subforms with property as NIL:~%~{~A~%~}~%~%"
+            (:error (error "failed to constrain property ~A~%Form:~%~A~%Subforms with property not known to be true:~%~{~A~%~}~%"
                            property form
                            (convert 'list (filter (op (not _2)) *constraint-context*)
                                     :pair-fn (op _2 _1))))
             (otherwise
-             (warn "Invalid report configuration for `constrain' form!~%Report config: ~A~%Validity: ~A~%Form:~%~A~%~%"
+             (warn "Invalid report configuration for `constrain' form!~%Report config: ~A~%Validity: ~A~%Form:~%~A~%"
                    report
                    valid
                    form)))))
@@ -267,8 +269,8 @@ the properties and "
                      (c1 (or function null) (lookup p1 :compare-fn))
                      (c2 (or function null) (lookup p2 :compare-fn))
                      (context map
-                              (map (:current s1)
-                                   (:propagated s2)
+                              (map (:current-symbol s1)
+                                   (:propagated-symbol s2)
                                    (:direction direction))))
                 ;; Redefine v1 and v2 in parallel
                 (let ((v1 (if c1
@@ -342,7 +344,7 @@ the properties and "
                  ;; Returned value
                  (first result)))
               (choose-if #'second (scan 'list recurse-results)))))
-       (setf (lookup *constraint-context* (list property form)) current-prop-value)
+       (setf (lookup *constraint-context* original-form) current-prop-value)
        (if propagate-up?
            (values current-prop-value sym)
            (values current-prop-value))))))
@@ -354,11 +356,11 @@ the properties and "
 
 
 ;;; Default declarations
-(declare-property nil (progn) :value nil :compare-fn (lambda (v1 v2 c) (if (eql (lookup c :current) 'progn) v2 v1)))
+(declare-property nil (progn) :value nil :compare-fn (lambda (v1 v2 c) (if (eql (lookup c :current-symbol) 'progn) v2 v1)))
 
 (declare-property non-mutating nil :compare-fn #'cut-compare-fn)
 (declare-property non-mutating (:atom))
-(declare-property non-consing (:symbol) :propagates nil)
+(declare-property non-mutating (:symbol))
 (declare-property non-mutating (print) :value-fn (lambda (form env) (declare (ignore env)) (if (third form) nil t)))
 (declare-property non-mutating (
                                 identity
@@ -420,3 +422,23 @@ the properties and "
                        (choose-if (op (not (subtypep _ 'fixnum env))))
                        (scan 'list)
                        (cons form-type arg-types)))))
+(declare-property non-consing (let) :expand nil :propagation-spec #'let-propagation-spec)
+
+
+(comment
+  ;;; FIXME: there is some kind of contagion between failures in nested `constrain' forms.
+  ;;; NOTE: Is this just re-evaluation of the same `constrain' form?
+  (let ((a 1) (b 2))
+    (time (constrain non-consing nil
+            (constrain non-mutating nil
+              (+ 1 2))
+            (constrain non-mutating nil
+              (identity (+ a b))))))
+  ;; FIXME: there is something wrong with how we're processing `non-mutating'
+  (let ((a 1) (b 2))
+    (time (constrain non-mutating nil
+            (constrain non-mutating nil
+              (identity (+ a b))))))
+  ;; TODO: Add facilities for specific forms to define which elements to look
+  ;; at to get their subforms.
+  )
