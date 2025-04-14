@@ -429,11 +429,11 @@ the properties and "
                   :value nil
                   :expand #'let*-expansion)
 
-(declare-property non-mutating nil :compare-fn #'cut-compare-fn)
-(declare-property non-mutating (:atom))
-(declare-property non-mutating (:symbol))
-(declare-property non-mutating (print) :value-fn (lambda (form env) (declare (ignore env)) (if (third form) nil t)))
-(declare-property non-mutating (
+(declare-property :non-mutating nil :compare-fn #'cut-compare-fn)
+(declare-property :non-mutating (:atom))
+(declare-property :non-mutating (:symbol))
+(declare-property :non-mutating (print) :value-fn (lambda (form env) (declare (ignore env)) (if (third form) nil t)))
+(declare-property :non-mutating (
                                 identity
                                 ;; List predicates
                                 listp consp null
@@ -463,13 +463,13 @@ the properties and "
                                 ;; Numeric operators
                                 + - * /
                                 ))
-(declare-property non-mutating (let) :expand nil :propagation-spec #'let-propagation-spec)
+(declare-property :non-mutating (let) :expand nil :propagation-spec #'let-propagation-spec)
 
-(declare-property non-consing nil :compare-fn #'cut-compare-fn)
-(declare-property non-consing (:atom))
-(declare-property non-consing (:symbol))
-(declare-property non-consing (
-                               ;; Destructive non-consing functions
+(declare-property :non-consing nil :compare-fn #'cut-compare-fn)
+(declare-property :non-consing (:atom))
+(declare-property :non-consing (:symbol))
+(declare-property :non-consing (
+                               ;; Destructive :non-consing functions
                                nreverse
                                nconc nreconc
                                delete delete-if delete-if-not delete-duplicates
@@ -502,7 +502,7 @@ the properties and "
                                ))
 ;;; Arithmetic operators
 ;;; NOTE: Is this fully correct?
-(declare-property non-consing (+ - *)
+(declare-property :non-consing (+ - *)
                   :value-fn
                   (lambda (form env)
                     (let ((form-type (strip-values-from-type (form-type form env)))
@@ -516,18 +516,18 @@ the properties and "
                        ;; If any type is invalid, return false
                        (not)
                        (collect 'list)
-                       ;; Find types which are INVALID for non-consing
+                       ;; Find types which are INVALID for :non-consing
                        (choose-if (op (not (subtypep _ 'fixnum env))))
                        (scan 'list)
                        (cons form-type arg-types)))))
-(declare-property non-consing (let) :expand nil :propagation-spec #'let-propagation-spec)
+(declare-property :non-consing (let) :expand nil :propagation-spec #'let-propagation-spec)
 
 
 (comment
   ;;; FIXME: there is some kind of contagion between failures in nested `constrain' forms.
   ;;; NOTE: Is this just re-evaluation of the same `constrain' form?
   (let ((a 1) (b 2))
-    (time (constrain non-consing nil
+    (time (constrain :non-consing nil
             (constrain non-mutating nil
               (+ 1 2))
             (constrain non-mutating nil
