@@ -76,10 +76,7 @@ it exist and be called."
                               (propagates :up)
                               (compare-fn nil compare-fn-provided-p)
                               (expand t)
-                              (propagation-spec (lambda (form env)
-                                                  (declare (ignore env))
-                                                  (cdr form))
-                                                propagation-spec-provided-p)
+                              (propagation-spec nil propagation-spec-provided-p)
                               (propagation-type t))
   "Declares `symbols' to have property `property', which applies
 to every form starting with a symbol in `symbols'.
