@@ -1,0 +1,31 @@
+#+title: CL Constraints
+
+~cl-constraints~ is a library to provide lightweight static code checking for Common Lisp.
+
+Most CL static code verifiers are intrinsically tied to interacting with a type system. Either
+you need to check types manually in your own macros, or transition entirely to heavyweight
+frameworks designed to implement a specific type system.
+
+~cl-constraints~ aims to provide a more integrated experience for static verification.
+Instead of aiming for generality (i.e. "we can define all properties within domain X"),
+we aim for the specific guarantee that if a ~constrain~ form wraps a code segment, and
+the logic for the corresponding property is correctly configured, the code within that
+segment will either have the specified property or notify the user otherwise.
+
+If a property _cannot_ be modeled within ~cl-constraints~, we make no claim about the
+presence of that property. ~cl-constraints~ is capable of tracking many simple invariants
+which are useful when designing production code, both general and specific to your own
+codebase, and makes it easy to model new properties as well.
+
+* Use-case
+~cl-constraints~ allows you to "fire and forget" code invariants. Once a code-segment is
+verified, barring changes in the underlying functions there is no change to the codebase
+which can invalidate that verification without informing the user that this has occurred.
+This certainty in turn makes CL's iterative style of development flow easily with making
+sure the final product has desirable properties.
+* Usage
+<to be continued>
+- See ~constrain~ and ~declare-property~ in the code for the intended API. There is also
+  example code in the tests and the ~comment~ tag at the bottom of the codebase.
+** Constraining forms
+** Defining new forms
