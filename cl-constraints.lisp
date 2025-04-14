@@ -200,10 +200,12 @@ the properties and "
         (funcall report valid)
         (unless valid
           (case report
+            ;; TODO: Make a custom warning class
             (:warn (warn "failed to constrain property ~A~%Form:~%~A~%Subforms with property not known to be true:~%~{~A~%~}~%"
                          property form
                          (convert 'list (filter (op (not _2)) *constraint-context*)
                                   :pair-fn (op _2 _1))))
+            ;; TODO: Make a custom error class
             (:error (error "failed to constrain property ~A~%Form:~%~A~%Subforms with property not known to be true:~%~{~A~%~}~%"
                            property form
                            (convert 'list (filter (op (not _2)) *constraint-context*)
