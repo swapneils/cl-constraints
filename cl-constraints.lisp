@@ -161,6 +161,9 @@ Defaults to `t'"
        ,(iter (for dec in declarations)
           (collecting `(declare-property ,@dec))))))
 
+(defparameter *constraint-context* (map)
+  "Tracks the context within a `constrain' form")
+
 (defmacro constrain (&whole form property (&key (report :warn)) &body body &environment env)
   "Constrains `body' to have property `property'.
 `body' is considered to be an implicit progn form. Note that this `progn' is taken
@@ -177,15 +180,21 @@ the properties and "
   (let* ((constrain-form (if (> (length body) 1)
                              `(progn ,@body)
                              (first body)))
+         ;; Refresh `*constraint-context*'
+         (*constraint-context* (map))
          (valid (constrain-internal property (map) constrain-form env)))
     (if (functionp report)
         (funcall report valid)
         (unless valid
           (case report
-            (:warn (warn "failed to constrain property ~A~%Form:~%~A~%~%"
-                         property form))
-            (:error (error "failed to constrain property ~A~%Form:~%~A~%~%"
-                           property form))
+            (:warn (warn "failed to constrain property ~A~%Form:~%~A~%Subforms with property as NIL:~%~{~A~%~}~%~%"
+                         property form
+                         (convert 'list (filter (op (not _2)) *constraint-context*)
+                                  :pair-fn (op _2 _1))))
+            (:error (error "failed to constrain property ~A~%Form:~%~A~%Subforms with property as NIL:~%~{~A~%~}~%~%"
+                           property form
+                           (convert 'list (filter (op (not _2)) *constraint-context*)
+                                    :pair-fn (op _2 _1))))
             (otherwise
              (warn "Invalid report configuration for `constrain' form!~%Report config: ~A~%Validity: ~A~%Form:~%~A~%~%"
                    report
@@ -333,6 +342,7 @@ the properties and "
                  ;; Returned value
                  (first result)))
               (choose-if #'second (scan 'list recurse-results)))))
+       (setf (lookup *constraint-context* (list property form)) current-prop-value)
        (if propagate-up?
            (values current-prop-value sym)
            (values current-prop-value))))))
