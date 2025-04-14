@@ -12,7 +12,8 @@
    "fset"
    "trivial-cltl2"
    "cl-form-types"
-   "defstar")
+   "defstar"
+   "str")
   :components
   ((:file "package")
    (:file "cl-constraints" :depends-on ("package"))))

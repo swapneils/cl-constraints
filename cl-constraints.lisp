@@ -14,12 +14,16 @@
 (defparameter *symbol-db* (map :default
                                (map :default
                                     (map (:expand t)
-                                         (:propagation-spec t)
+                                         (:propagation-spec (lambda (form env)
+                                                              (declare (ignore env))
+                                                              (cdr form)))
                                          (:propagation-type t)))))
 
 (defparameter *defaults* (map :default
                               (map (:expand t)
-                                   (:propagation-spec t)
+                                   (:propagation-spec (lambda (form env)
+                                                        (declare (ignore env))
+                                                        (cdr form)))
                                    (:propagation-type t))))
 
 (defun* get-property (property (target (or symbol list)))
@@ -72,7 +76,10 @@ it exist and be called."
                               (propagates :up)
                               (compare-fn nil compare-fn-provided-p)
                               (expand t)
-                              (propagation-spec t)
+                              (propagation-spec (lambda (form env)
+                                                  (declare (ignore env))
+                                                  (cdr form))
+                                                propagation-spec-provided-p)
                               (propagation-type t))
   "Declares `symbols' to have property `property', which applies
 to every form starting with a symbol in `symbols'.
@@ -128,14 +135,18 @@ and tested via `subtypep' to conform to this spec.
 Defaults to `t'
 
 `propagation-spec' determines which children of a form are considered
-for propagation. It contains the type of the COMPILE time object, not
-the runtime value. Most likely this will be either `list', `symbol',
-or a `satisfies' type.
-Defaults to `t'"
+for propagation. It contains a function which takes in `form' and `env'
+and returns a list of subforms.
+Defaults to the `cdr' of `form'"
   `(let ((new-map (map (:propagates ,propagates)
                        (:expand ,expand)
-                       (:propagation-spec ',propagation-spec)
-                       (:propagation-type ',propagation-type))))
+                       (:propagation-type ',propagation-type)))
+         (symbols (apply
+                   #'concatenate 'list
+                   ;; Explicit symbols
+                   ',(filter #'symbolp symbols)
+                   (list ,@(filter (lambda (s) (not (symbolp s))) symbols)))))
+     (declare (ignorable symbols))
      (cond
        (,(or value-provided-p
              (and symbols (not value-fn-provided-p)))
@@ -144,8 +155,11 @@ Defaults to `t'"
         (setf (lookup new-map :value-fn) ,value-fn)))
      (when ,compare-fn-provided-p
        (setf (lookup new-map :compare-fn) ,compare-fn))
+     (when ,propagation-spec-provided-p
+       (setf (lookup new-map :propagation-spec) ,propagation-spec))
+     (setf new-map (map ($ (lookup *defaults* ',property)) ($ new-map)))
      ,(if symbols
-          `(iter (for sym in ',symbols)
+          `(iter (for sym in symbols)
              (setf (lookup (lookup *symbol-db* sym) ',property) new-map))
           `(setf (lookup *defaults* ',property) new-map))))
 
@@ -203,9 +217,10 @@ the properties and "
                    valid
                    form)))))
     constrain-form))
-(defun* constrain-internal ((property symbol) (config map) form env
+(defun* constrain-internal ((property symbol) (config map) original-form env
                             &optional propagate-down propagate-down-value
                             &aux
+                            (form original-form)
                             (macro-original-sym nil)
                             (sym nil)
                             ;; Make a dynamically-local version of the
@@ -243,6 +258,9 @@ the properties and "
 
     (iter
       (setf sym (first form))
+      (for expand-prop = (lookup (get-property property sym) :expand))
+      (for expand-func = (or (and (functionp expand-prop) expand-prop)
+                             (and (symbolp sym) (macro-function sym))))
       (cond
         ;; Ignore constrain forms in `form'
         ((eql sym 'constrain)
@@ -250,14 +268,15 @@ the properties and "
          ;; form as a `progn'
          (setf form `(progn ,@(cddr form))))
         ;; Macroexpand macros if they're configured to do so for this proeprty
-        ((and
-          (macro-function sym env)
-          (lookup (get-property property sym) :expand))
+        ((and expand-prop expand-func)
          ;; Track the top-level non-`constrain' macro
          ;; so we can compare its properties with the final macroexpansion
          ;; result.
          (setf macro-original-sym (or macro-original-sym sym))
-         (setf form (macroexpand form env)))
+         (let ((new-form (funcall expand-func form env)))
+           (if (equal new-form form)
+               (return)
+               (setf form new-form))))
         ;; Use the new value of form
         (t (return))))
 
@@ -301,17 +320,19 @@ the properties and "
                   propagate-down propagate-down-value)
                  ;; Don't modify if there's no down-propagation going on
                  current-prop-value))
-            (subforms list (cdr form))
             (propagation-spec (lookup prop :propagation-spec))
+            (subforms list (multiple-value-bind (subforms new-env)
+                               (funcall propagation-spec form env)
+                             (when new-env
+                               (setf env new-env))
+                             subforms))
             (propagation-type (lookup prop :propagation-type))
             (valid-subforms
              list
-             (filter (op (and
-                          ;; Check propagation spec
-                          (typep _1 propagation-spec)
-                          ;; Check propagation type
-                          (let ((form-type (strip-values-from-type (form-type _1 env))))
-                            (subtypep form-type propagation-type env))))
+             (filter (op
+                       ;; Check propagation type
+                       (let ((form-type (strip-values-from-type (form-type _1 env))))
+                         (subtypep form-type propagation-type env)))
                      subforms))
             (propagates (lookup prop :propagates))
             (propagate-down?
@@ -354,9 +375,60 @@ the properties and "
   (declare (ignore context))
   (and v1 v2))
 
+(defun let-propagation-spec (form env)
+  (let* ((let-args (second form))
+         (let-body (cddr form))
+         ;; Apply the declaration
+         (let-declare (when (eql (first (first let-body)) 'declare)
+                        (prog1 (rest (first let-body))
+                          (setf let-body (rest let-body)))))
+         (let-names (image #'first let-args))
+         (let-forms (image #'second let-args))
+         (let-form-types (image (lambda (let-form)
+                                  (strip-values-from-type (form-type let-form env)))
+                                let-forms)))
+    (setf env
+          (augment-environment env
+                               :variable let-names
+                               :declare (concat
+                                         (iter
+                                           (for name in let-names)
+                                           (for form-type in let-form-types)
+                                           (collecting `(type ,form-type ,name)))
+                                         let-declare)))
+    (values
+     (concat
+      (image #'second (filter #'listp let-args))
+      ;; TODO: Figure out how to add the environment into the
+      ;; return string rather than a separate return value. The
+      ;; current approach has issues with the edited environment
+      ;; being used for the let argument bodies instead of just
+      ;; the let body
+      let-body)
+     ;; Return the modified environment
+     env)))
+
+(defun let*-expansion (form env)
+  (declare (ignore env))
+  (let ((let-args (second form))
+        (let-body (cddr form)))
+    (case (length let-args)
+      (0 `(progn ,@let-body))
+      (1 `(let ,let-args ,@let-body))
+      (otherwise `(let (,(first let-args))
+                    (let* (,@(rest let-args))
+                      ,@let-body))))))
+
 
 ;;; Default declarations
 (declare-property nil (progn) :value nil :compare-fn (lambda (v1 v2 c) (if (eql (lookup c :current-symbol) 'progn) v2 v1)))
+(declare-property nil (let)
+                  :value nil
+                  :expand nil
+                  :propagation-spec #'let-propagation-spec)
+(declare-property nil (let)
+                  :value nil
+                  :expand #'let*-expansion)
 
 (declare-property non-mutating nil :compare-fn #'cut-compare-fn)
 (declare-property non-mutating (:atom))
@@ -372,6 +444,19 @@ the properties and "
                                 < <= > >= =
                                 ;; List operators
                                 first second third fourth fifth sixth seventh eighth ninth tenth
+                                (iter outer (for len from 1 to 5)
+                                  (iter
+                                    (iter:with num-to-string-format =
+                                               (str:concat "~" (write-to-string len) ",'0b"))
+                                    (for i below (expt 2 len))
+
+                                    (for i-str = (format nil num-to-string-format i))
+                                    (for mid-str = (~>> i-str
+                                                        (str:replace-all "0" "a")
+                                                        (str:replace-all "1" "d")))
+                                    (for sym = (find-symbol (str:upcase (str:concat "c" mid-str "r")) :cl))
+                                    (when sym
+                                      (in outer (collecting sym)))))
                                 ;; Array operators
                                 make-array aref
                                 ;; Sequence operators
@@ -379,6 +464,7 @@ the properties and "
                                 ;; Numeric operators
                                 + - * /
                                 ))
+(declare-property non-mutating (let) :expand nil :propagation-spec #'let-propagation-spec)
 
 (declare-property non-consing nil :compare-fn #'cut-compare-fn)
 (declare-property non-consing (:atom))
@@ -398,6 +484,19 @@ the properties and "
                                < <= > >= =
                                ;; List operators
                                first second third fourth fifth sixth seventh eighth ninth tenth
+                               (iter outer (for len from 1 to 5)
+                                  (iter
+                                    (iter:with num-to-string-format =
+                                               (str:concat "~" (write-to-string len) ",'0b"))
+                                    (for i below (expt 2 len))
+
+                                    (for i-str = (format nil num-to-string-format i))
+                                    (for mid-str = (~>> i-str
+                                                        (str:replace-all "0" "a")
+                                                        (str:replace-all "1" "d")))
+                                    (for sym = (find-symbol (str:upcase (str:concat "c" mid-str "r")) :cl))
+                                    (when sym
+                                      (in outer (collecting sym)))))
                                ;; Sequence operators
                                elt
                                ;; length
