@@ -378,7 +378,12 @@ the properties and "
   (let* ((let-args (second form))
          (let-body (cddr form))
          ;; Apply the declaration
-         (let-declare (when (eql (first (first let-body)) 'declare)
+         (let-declare (when
+                          (and
+                           ;; List check to avoid errors
+                           ;; when invoking `first'
+                           (listp (first let-body))
+                           (eql (first (first let-body)) 'declare))
                         (prog1 (rest (first let-body))
                           (setf let-body (rest let-body)))))
          (let-names (image #'first let-args))
