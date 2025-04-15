@@ -9,6 +9,16 @@
       (second form-type)
       form-type))
 
+(defun make-ignore-compare-fn (ignored-syms)
+  (lambda (v1 v2 c)
+    (if (member (lookup c :current-symbol) ignored-syms)
+        v2
+        ;; If propagating from `progn' to somewhere else,
+        ;; we want to at least consider non-nil values,
+        ;; but if it's nil then we want to ignore it
+        ;; to reduce chaos.
+        (or v2 v1))))
+
 
 ;; Each symbol has a map by default
 (defparameter *symbol-db* (map :default
@@ -227,6 +237,7 @@ the properties and "
                             ;; lexical information
                             (*symbol-db* *symbol-db*))
   (declare (ignorable config))
+  ;; (print (list property form (when (listp form) (get-property-value property form form env))))
 
   ;; Special cases
   (block constrain-internal
@@ -353,6 +364,7 @@ the properties and "
                                                   sym current-prop-value)
                               (constrain-internal property config subform env))))
                        (scan 'list valid-subforms))))
+            ;; (_ (print (list "recurse" recurse-results)))
             (current-prop-value
              (collect-fn
               t (constantly current-prop-value)
@@ -490,23 +502,15 @@ the properties and "
 
 ;;; Default declarations
 (declare-property nil (progn prog1 prog2)
-                  :value nil
-                  :compare-fn
-                  (lambda (v1 v2 c)
-                    (if (member (lookup c :current-symbol)
-                                '(progn prog1 prog2))
-                        v2
-                        v1)))
+                  :value t)
 (declare-property nil (let)
-                  :value nil
                   :expand nil
                   :propagation-spec #'let-propagation-spec)
 (declare-property nil (let)
-                  :value nil
                   :expand #'let*-expansion)
-;; (declare-property nil (the)
-;;                   :value nil
-;;                   :propagation-spec #'the-propagation-spec)
+(declare-property nil (the)
+                  :value t
+                  :propagation-spec #'the-propagation-spec)
 
 (declare-property :non-mutating nil :compare-fn #'cut-compare-fn)
 (declare-property :non-mutating (:atom))

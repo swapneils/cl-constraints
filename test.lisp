@@ -49,16 +49,27 @@
   (is
    (no-constrain-errors
     (constrain :non-mutating nil
-         (let ((a 3))
-           (declare (ignore a))
-           (prog2 20
-               (+ 3 2)
-             (- 3 2))))))
+      (let ((a 3))
+        (declare (ignore a))
+        (prog2 20
+            (+ 3 2)
+          (- 3 2))))))
   (is (equal
        (let ((a (iota 3))
              (b (iota 3)))
-         (constrain :non-mutating nil (let ((c (append a b))) c)))
+         (constrain :non-mutating nil (let ((c (append a b))) (the list c))))
        '(0 1 2 0 1 2)))
   (is
    (no-constrain-errors
-    (constrain :non-mutating nil (let ((c (append a b))) c)))))
+    (constrain :non-mutating nil (let ((c (append a b))) (the list c)))))
+  (is
+   (not
+    (no-constrain-errors
+     (constrain :non-consing nil (let ((c (append a b))) (the list c))))))
+  (is
+   (no-constrain-errors
+    (constrain :non-mutating nil (let ((c (append a b))) (prog1 c)))))
+  (is
+   (not
+    (no-constrain-errors
+     (constrain :non-consing nil (let ((c (append a b))) (prog1 c)))))))
