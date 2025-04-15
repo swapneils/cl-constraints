@@ -517,16 +517,28 @@ the properties and "
 (declare-property :non-mutating (:symbol))
 (declare-property :non-mutating (print) :value-fn (lambda (form env) (declare (ignore env)) (if (third form) nil t)))
 (declare-property :non-mutating (
+                                 ;; Control flow functions
                                  identity
                                  ;; List predicates
-                                 listp consp null
+                                 null
                                  ;; Sequence predicates
                                  emptyp
+                                 fset:sort
                                  ;; Numeric predicates
                                  < <= > >= =
+                                 ;; Boolean predicates
+                                 and or if when unless
+                                 ;; Type predicates
+                                 listp consp
+                                 vectorp arrayp
+                                 integerp rationalp floatp realp numberp
+                                 symbolp packagep
                                  ;; List operators
                                  first cl:first second third fourth fifth sixth seventh eighth ninth tenth
-                                 rest nthcdr
+                                 cl:last fset:last
+                                 rest
+                                 nth nthcdr
+                                 ;; car and friends
                                  (iter outer (for len from 1 to 5)
                                    (iter
                                      (iter:with num-to-string-format =
@@ -540,7 +552,7 @@ the properties and "
                                      (for sym = (find-symbol (str:upcase (str:concat "c" mid-str "r")) :cl))
                                      (when sym
                                        (in outer (collecting sym)))))
-                                 append
+                                 append concatenate
                                  ;; Array operators
                                  make-array aref
                                  ;; Sequence operators
@@ -554,20 +566,33 @@ the properties and "
 (declare-property :non-consing (:atom))
 (declare-property :non-consing (:symbol))
 (declare-property :non-consing (
-                                ;; Destructive :non-consing functions
+                                ;; Control flow functions
+                                identity
+                                ;; Destructive :non-consing operators
                                 nreverse
                                 nconc nreconc
                                 delete delete-if delete-if-not delete-duplicates
-                                nsublis
-                                cl:sort
-                                ;; Control flow functions
-                                identity
+                                nsubstitute nsubstitute-if nsubstitute-if-not
+                                nsublis nsubst nsubst-if nsubst-if-not
+                                nbutlast
+                                nsplice-seq nsplice-seqf
                                 ;; List predicates
-                                listp consp null
+                                null
                                 ;; Numeric predicates
                                 < <= > >= =
+                                ;; Boolean predicates
+                                and or if when unless
+                                ;; Type predicates
+                                listp consp
+                                vectorp arrayp
+                                integerp rationalp floatp realp numberp
+                                symbolp packagep
                                 ;; List operators
-                                first cl:first second third fourth fifth sixth seventh eighth ninth tenth
+                                cl:first second third fourth fifth sixth seventh eighth ninth tenth
+                                cl:last
+                                rest
+                                nth nthcdr
+                                ;; car and friends
                                 (iter outer (for len from 1 to 5)
                                   (iter
                                     (iter:with num-to-string-format =
@@ -581,11 +606,13 @@ the properties and "
                                     (for sym = (find-symbol (str:upcase (str:concat "c" mid-str "r")) :cl))
                                     (when sym
                                       (in outer (collecting sym)))))
+                                ;; Array operators
+                                aref
                                 ;; Sequence operators
                                 elt
-                                ;; length
+                                ;; length ;; Is this really non-consing?
                                 ))
-;;; Arithmetic operators
+;;; Arithmetic operators are only non-consing for fixnum inputs and outputs
 ;;; NOTE: Is this fully correct?
 (declare-property :non-consing (+ - *)
                   :value-fn
