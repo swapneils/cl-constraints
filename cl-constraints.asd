@@ -3,6 +3,7 @@
   :maintainer "Swapneil Singh <swapneil.singh@gmail.com>"
   :mailto "swapneil.singh@gmail.com"
   :license "MIT"
+  :version "0.0.1"
   :depends-on
   ("alexandria"
    "serapeum"
