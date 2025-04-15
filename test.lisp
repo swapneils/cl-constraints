@@ -20,13 +20,35 @@
        (constrain :non-mutating nil
          (let ((a 3))
            (declare (ignore a))
-           (+ 3 2)))
+           (prog1
+               (+ 3 2)
+             (- 3 2))))
        5))
   (is
    (handler-case
        (macroexpand '(constrain :non-mutating nil
                       (let ((a 3))
                         (declare (ignore a))
-                        (+ 3 2))))
+                        (prog1
+                            (+ 3 2)
+                          (- 3 2)))))
+     (simple-warning (w) (print "failed")
+       (warn w) nil)))
+  (is (equal
+       (constrain :non-mutating nil
+         (let ((a 3))
+           (declare (ignore a))
+           (prog2 20
+               (+ 3 2)
+             (- 3 2))))
+       5))
+  (is
+   (handler-case
+       (macroexpand '(constrain :non-mutating nil
+                      (let ((a 3))
+                        (declare (ignore a))
+                        (prog2 20
+                            (+ 3 2)
+                          (- 3 2)))))
      (simple-warning (w) (print "failed")
        (warn w) nil))))

@@ -476,7 +476,14 @@ the properties and "
 
 
 ;;; Default declarations
-(declare-property nil (progn) :value nil :compare-fn (lambda (v1 v2 c) (if (eql (lookup c :current-symbol) 'progn) v2 v1)))
+(declare-property nil (progn prog1 prog2)
+                  :value nil
+                  :compare-fn
+                  (lambda (v1 v2 c)
+                    (if (member (lookup c :current-symbol)
+                                '(progn prog1 prog2))
+                        v2
+                        v1)))
 (declare-property nil (let)
                   :value nil
                   :expand nil
