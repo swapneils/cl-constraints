@@ -516,7 +516,7 @@ the properties and "
                                  ;; Numeric predicates
                                  < <= > >= =
                                  ;; List operators
-                                 first second third fourth fifth sixth seventh eighth ninth tenth
+                                 first cl:first second third fourth fifth sixth seventh eighth ninth tenth
                                  rest nthcdr
                                  (iter outer (for len from 1 to 5)
                                    (iter
@@ -531,6 +531,7 @@ the properties and "
                                      (for sym = (find-symbol (str:upcase (str:concat "c" mid-str "r")) :cl))
                                      (when sym
                                        (in outer (collecting sym)))))
+                                 append
                                  ;; Array operators
                                  make-array aref
                                  ;; Sequence operators
@@ -544,21 +545,21 @@ the properties and "
 (declare-property :non-consing (:atom))
 (declare-property :non-consing (:symbol))
 (declare-property :non-consing (
-                               ;; Destructive :non-consing functions
-                               nreverse
-                               nconc nreconc
-                               delete delete-if delete-if-not delete-duplicates
-                               nsublis
-                               cl:sort
-                               ;; Control flow functions
-                               identity
-                               ;; List predicates
-                               listp consp null
-                               ;; Numeric predicates
-                               < <= > >= =
-                               ;; List operators
-                               first second third fourth fifth sixth seventh eighth ninth tenth
-                               (iter outer (for len from 1 to 5)
+                                ;; Destructive :non-consing functions
+                                nreverse
+                                nconc nreconc
+                                delete delete-if delete-if-not delete-duplicates
+                                nsublis
+                                cl:sort
+                                ;; Control flow functions
+                                identity
+                                ;; List predicates
+                                listp consp null
+                                ;; Numeric predicates
+                                < <= > >= =
+                                ;; List operators
+                                first cl:first second third fourth fifth sixth seventh eighth ninth tenth
+                                (iter outer (for len from 1 to 5)
                                   (iter
                                     (iter:with num-to-string-format =
                                                (str:concat "~" (write-to-string len) ",'0b"))
@@ -571,10 +572,10 @@ the properties and "
                                     (for sym = (find-symbol (str:upcase (str:concat "c" mid-str "r")) :cl))
                                     (when sym
                                       (in outer (collecting sym)))))
-                               ;; Sequence operators
-                               elt
-                               ;; length
-                               ))
+                                ;; Sequence operators
+                                elt
+                                ;; length
+                                ))
 ;;; Arithmetic operators
 ;;; NOTE: Is this fully correct?
 (declare-property :non-consing (+ - *)
