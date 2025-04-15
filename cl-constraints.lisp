@@ -474,6 +474,14 @@ the properties and "
       ;; Return the lambda body and modified environment
       (values lambda-body env))))
 
+;; Just ignore the type spec for the contents of `the' forms
+;; NOTE: Not overriding the expansion because we want to use
+;; the type information when processing the parent form
+(defun the-propagation-spec
+    (form env)
+  (declare (ignore env))
+  (list (third form)))
+
 
 ;;; Default declarations
 (declare-property nil (progn prog1 prog2)
@@ -491,6 +499,9 @@ the properties and "
 (declare-property nil (let)
                   :value nil
                   :expand #'let*-expansion)
+;; (declare-property nil (the)
+;;                   :value nil
+;;                   :propagation-spec #'the-propagation-spec)
 
 (declare-property :non-mutating nil :compare-fn #'cut-compare-fn)
 (declare-property :non-mutating (:atom))
@@ -506,6 +517,7 @@ the properties and "
                                  < <= > >= =
                                  ;; List operators
                                  first second third fourth fifth sixth seventh eighth ninth tenth
+                                 rest nthcdr
                                  (iter outer (for len from 1 to 5)
                                    (iter
                                      (iter:with num-to-string-format =
