@@ -434,35 +434,35 @@ the properties and "
 (declare-property :non-mutating (:symbol))
 (declare-property :non-mutating (print) :value-fn (lambda (form env) (declare (ignore env)) (if (third form) nil t)))
 (declare-property :non-mutating (
-                                identity
-                                ;; List predicates
-                                listp consp null
-                                ;; Sequence predicates
-                                emptyp
-                                ;; Numeric predicates
-                                < <= > >= =
-                                ;; List operators
-                                first second third fourth fifth sixth seventh eighth ninth tenth
-                                (iter outer (for len from 1 to 5)
-                                  (iter
-                                    (iter:with num-to-string-format =
-                                               (str:concat "~" (write-to-string len) ",'0b"))
-                                    (for i below (expt 2 len))
+                                 identity
+                                 ;; List predicates
+                                 listp consp null
+                                 ;; Sequence predicates
+                                 emptyp
+                                 ;; Numeric predicates
+                                 < <= > >= =
+                                 ;; List operators
+                                 first second third fourth fifth sixth seventh eighth ninth tenth
+                                 (iter outer (for len from 1 to 5)
+                                   (iter
+                                     (iter:with num-to-string-format =
+                                                (str:concat "~" (write-to-string len) ",'0b"))
+                                     (for i below (expt 2 len))
 
-                                    (for i-str = (format nil num-to-string-format i))
-                                    (for mid-str = (~>> i-str
-                                                        (str:replace-all "0" "a")
-                                                        (str:replace-all "1" "d")))
-                                    (for sym = (find-symbol (str:upcase (str:concat "c" mid-str "r")) :cl))
-                                    (when sym
-                                      (in outer (collecting sym)))))
-                                ;; Array operators
-                                make-array aref
-                                ;; Sequence operators
-                                length elt
-                                ;; Numeric operators
-                                + - * /
-                                ))
+                                     (for i-str = (format nil num-to-string-format i))
+                                     (for mid-str = (~>> i-str
+                                                         (str:replace-all "0" "a")
+                                                         (str:replace-all "1" "d")))
+                                     (for sym = (find-symbol (str:upcase (str:concat "c" mid-str "r")) :cl))
+                                     (when sym
+                                       (in outer (collecting sym)))))
+                                 ;; Array operators
+                                 make-array aref
+                                 ;; Sequence operators
+                                 length elt
+                                 ;; Numeric operators
+                                 + - * /
+                                 ))
 (declare-property :non-mutating (let) :expand nil :propagation-spec #'let-propagation-spec)
 
 (declare-property :non-consing nil :compare-fn #'cut-compare-fn)
@@ -528,15 +528,20 @@ the properties and "
   ;;; NOTE: Is this just re-evaluation of the same `constrain' form?
   (let ((a 1) (b 2))
     (time (constrain :non-consing nil
-            (constrain non-mutating nil
+            (constrain :non-mutating nil
               (+ 1 2))
-            (constrain non-mutating nil
+            (constrain :non-mutating nil
               (identity (+ a b))))))
   ;; FIXME: there is something wrong with how we're processing `non-mutating'
   (let ((a 1) (b 2))
-    (time (constrain non-mutating nil
-            (constrain non-mutating nil
+    (time (constrain :non-mutating nil
+            (constrain :non-mutating nil
               (identity (+ a b))))))
   ;; TODO: Add facilities for specific forms to define which elements to look
   ;; at to get their subforms.
+  ;; NOTE: I think this is already done via `:propagation-spec'
+  ;; TODO: Merge configs with the stack of default configs, rather than
+  ;; using a switch based on whether values are available or not
+  ;; NOTE: This is partly done, but I don't think we incorporate *both*
+  ;; of the symbol default and the property default
   )
