@@ -418,6 +418,62 @@ the properties and "
                     (let* (,@(rest let-args))
                       ,@let-body))))))
 
+;;; TODO: Figure out how `lambda-propagation-spec'
+;;; should work. `lambda' functions aren't immediately
+;;; evaluated, but there has to be some way to track
+;;; variables referring to them and then convert the
+;;; type spec into the funcall spec.
+;;; NOTE: This would also unblock tracking properties
+;;; through local function definitions like `flet'/`labels'.
+(defun lambda-propagation-spec (form env)
+  (*let ((lambda-args list (second form))
+         ((:values required-args
+                   optional-args
+                   rest-arg
+                   keyword-args
+                   lambda-allow-other-keys
+                   aux-args
+                   has-key-args)
+          (parse-ordinary-lambda-list lambda-args))
+         ((:values lambda-body
+                   lambda-declare
+                   lambda-docstring)
+          (parse-body (cddr form) :documentation t)))
+    (*let (
+           ;; Extract declarations from the `declare' form
+           (lambda-declare (cdar lambda-declare))
+           ;; Get non-aux argument names
+           (non-aux-arg-names
+            (concat required-args
+                    (image #'first optional-args)
+                    rest-arg
+                    (image #'cadar keyword-args))))
+      ;; Update the environment with the existence of non-aux arguments
+      ;; NOTE: This needs to be done before processing the forms for
+      ;; the aux arguments
+      (setf env (augment-environment env :variable non-aux-arg-names))
+      ;; Update `env' with the types for the aux args
+      ;; FIXME: Augment the environment incrementally
+      ;; with each aux type. Preferably while evaluating
+      ;; the forms one by one somehow, rather than within
+      ;; the propagation spec...
+      (iter
+        (for aux-spec in aux-args)
+        (for aux-name = (first aux-spec))
+        (for aux-form = (second aux-spec))
+        (for aux-form-type = (strip-values-from-type (form-type aux-form env)))
+        (setf env
+              (augment-environment
+               env
+               :variable `(,aux-name)
+               :declare `((type ,aux-form-type ,aux-name)))))
+
+      ;; Apply the explicit declarations from the lambda
+      (setf env (augment-environment lambda-declare))
+
+      ;; Return the lambda body and modified environment
+      (values lambda-body env))))
+
 
 ;;; Default declarations
 (declare-property nil (progn) :value nil :compare-fn (lambda (v1 v2 c) (if (eql (lookup c :current-symbol) 'progn) v2 v1)))
