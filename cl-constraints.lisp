@@ -452,6 +452,9 @@ the properties and "
 ;;; type spec into the funcall spec.
 ;;; NOTE: This would also unblock tracking properties
 ;;; through local function definitions like `flet'/`labels'.
+;;; TODO: Use this utility to apply constraints to unknown
+;;; functions by retrieving their `function-lambda-expression'
+;;; and validating the constraint on that
 (defun lambda-propagation-spec (form env)
   (*let ((lambda-args list (second form))
          ((:values required-args
@@ -563,12 +566,14 @@ the properties and "
 
 ;;; Default declarations
 (declare-property nil (assert-constraint)
-                  :value-fn
-                  (lambda (form env)
-                    (declare (ignore env))
-                    (*let ((asserted-prop (second form)))
-                      ;; The assertion equals the property asserted
-                      (eql asserted-prop (lookup *constraint-context* :property))))
+                  ;; Replicate the behavior for `progn'
+                  :value t
+                  ;; :value-fn
+                  ;; (lambda (form env)
+                  ;;   (declare (ignore env))
+                  ;;   (*let ((asserted-prop (second form)))
+                  ;;     ;; The assertion equals the property asserted
+                  ;;     (eql asserted-prop (lookup *constraint-context* :property))))
                   :expand nil
                   :propagation-spec
                   (lambda (form env)
