@@ -451,6 +451,33 @@ the properties and "
                     (let* (,@(rest let-args))
                       ,@let-body))))))
 
+(defun setq-propagation-spec (form env)
+  (declare (ignore env))
+  (*let ((args (rest form)))
+    ;; Return subforms
+    (iter
+      (for arg in args)
+      (for i from 1)
+      ;; Only collect value forms, not assignment targets
+      (when (evenp i)
+        (collecting arg)))))
+
+(defun multiple-value-bind-propagation-spec (form env)
+  (*let ((vars (second form))
+         (form (third form))
+         (body (cdddr form))
+         ;; (form-type (strip-values-from-type (form-type form env)))
+         )
+    (setf env (augment-environment env
+                                   :variable vars))
+    ;; Type-annotate the first bound value if we know the corresponding type
+    ;; TODO: Figure out how to do this correctly, currently we don't know
+    ;; if the variable will be overriden
+    ;; (when form-type
+    ;;   (setf env (augment-environment env
+    ;;                                  :declare `((type ,form-type ,(first vars))))))
+    (values body env)))
+
 ;;; TODO: Figure out how `lambda-propagation-spec'
 ;;; should work. `lambda' functions aren't immediately
 ;;; evaluated, but there has to be some way to track
@@ -618,6 +645,10 @@ the properties and "
                    :propagation-spec #'let-propagation-spec)
 (define-constraint nil (let*)
                    :expand #'let*-expansion)
+(define-constraint nil (multiple-value-bind)
+                   :propagation-spec #'multiple-value-bind-propagation-spec)
+(define-constraint nil (setq)
+                   :propagation-spec #'setq-propagation-spec)
 (define-constraint nil (the)
                    :value t
                    :propagation-spec #'the-propagation-spec)
@@ -668,6 +699,7 @@ the properties and "
 (define-constraint :non-mutating (
                                   ;; Control flow functions
                                   identity
+                                  if when unless
                                   ;; List predicates
                                   null
                                   ;; Sequence predicates
@@ -678,7 +710,7 @@ the properties and "
                                   abs
                                   zerop
                                   ;; Boolean predicates
-                                  and or if when unless
+                                  and or
                                   ;; Type predicates
                                   listp consp
                                   vectorp arrayp
@@ -729,6 +761,7 @@ the properties and "
 (define-constraint :non-consing (
                                  ;; Control flow functions
                                  identity
+                                 if when unless
                                  ;; Destructive :non-consing operators
                                  nreverse
                                  nconc nreconc
@@ -748,7 +781,7 @@ the properties and "
                                  ;; Numeric predicates
                                  < <= > >= =
                                  ;; Boolean predicates
-                                 and or if when unless
+                                 and or
                                  ;; Type predicates
                                  listp consp
                                  vectorp arrayp
