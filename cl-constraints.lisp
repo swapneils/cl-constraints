@@ -634,10 +634,8 @@ the properties and "
                        (unless (eql asserted-constraint (lookup *constraint-context* :constraint))
                          ;; Otherwise return the body
                          (cddr form)))))
-(define-constraint nil (progn prog1 prog2)
-                   :value t)
+(define-constraint nil (progn prog1 prog2))
 (define-constraint nil (locally)
-                   :value t
                    ;; :propagation-spec #'locally-propagation-spec
                    :expand #'locally-expansion)
 (define-constraint nil (let)
@@ -646,23 +644,24 @@ the properties and "
 (define-constraint nil (let*)
                    :expand #'let*-expansion)
 (define-constraint nil (multiple-value-bind)
+                   :expand nil
                    :propagation-spec #'multiple-value-bind-propagation-spec)
 (define-constraint nil (setq)
+                   :expand nil
                    :propagation-spec #'setq-propagation-spec)
 (define-constraint nil (the)
-                   :value t
+                   :expand nil
                    :propagation-spec #'the-propagation-spec)
 (define-constraint nil (typecase etypecase)
-                   :value t
                    ;; :propagation-spec #'typecase-propagation-spec
                    :expand #'typecase-expansion)
 (define-constraint nil (cond)
-                   :value t
+                   :expand nil
                    :propagation-spec #'cond-propagation-spec)
 
 ;;; Serapeum default declarations
 (define-constraint nil (serapeum::truly-the)
-                   :value t
+                   :expand nil
                    :propagation-spec #'the-propagation-spec)
 (defun with-subtype-dispatch-expansion (form env)
   (declare (ignore env))
