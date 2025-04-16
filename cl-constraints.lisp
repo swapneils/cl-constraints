@@ -409,10 +409,12 @@ the properties and "
                         (prog1 (rest (first let-body))
                           (setf let-body (rest let-body)))))
          (let-names (image #'first let-args))
-         (let-forms (image #'second let-args))
-         (let-form-types (image (lambda (let-form)
-                                  (strip-values-from-type (form-type let-form env)))
-                                let-forms)))
+         ;; Use `nil' for let args without values
+         (let-forms (image (op (when (listp _1) (second _1))) let-args))
+         ;; (let-form-types (image (lambda (let-form)
+         ;;                          (strip-values-from-type (form-type let-form env)))
+         ;;                        let-forms))
+         )
     (setf env
           (augment-environment env
                                :variable let-names
@@ -428,7 +430,7 @@ the properties and "
                                ))
     (values
      (concat
-      (image #'second (filter #'listp let-args))
+      let-forms
       ;; TODO: Figure out how to add the environment into the
       ;; return string rather than a separate return value. The
       ;; current approach has issues with the edited environment
@@ -481,7 +483,8 @@ the properties and "
             (concat required-args
                     (image #'first optional-args)
                     rest-arg
-                    (image #'cadar keyword-args))))
+                    (image #'cadar keyword-args)))
+           (aux-forms (image #'second aux-args)))
       ;; Update the environment with the existence of non-aux arguments
       ;; NOTE: This needs to be done before processing the forms for
       ;; the aux arguments
@@ -494,8 +497,8 @@ the properties and "
       (iter
         (for aux-spec in aux-args)
         (for aux-name = (first aux-spec))
-        (for aux-form = (second aux-spec))
-        (for aux-form-type = (strip-values-from-type (form-type aux-form env)))
+        ;; (for aux-form in aux-forms)
+        ;; (for aux-form-type = (strip-values-from-type (form-type aux-form env)))
         (setf env
               (augment-environment
                env
@@ -508,8 +511,8 @@ the properties and "
       ;; Apply the explicit declarations from the lambda
       (setf env (augment-environment env :declare (cdar lambda-declare)))
 
-      ;; Return the lambda body and modified environment
-      (values lambda-body env))))
+      ;; Return the aux forms, lambda body, and modified environment
+      (values (concat aux-forms lambda-body) env))))
 
 ;; Just ignore the type spec for the contents of `the' forms
 ;; NOTE: Not overriding the expansion because we want to use
@@ -613,7 +616,7 @@ the properties and "
 (define-constraint nil (let)
                    :expand nil
                    :propagation-spec #'let-propagation-spec)
-(define-constraint nil (let)
+(define-constraint nil (let*)
                    :expand #'let*-expansion)
 (define-constraint nil (the)
                    :value t
