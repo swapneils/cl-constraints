@@ -5,10 +5,7 @@
 
 (defmacro no-constrain-errors (form)
   `(handler-case (and (macroexpand ',form) t)
-     (simple-warning (w)
-       (print "failed")
-       (warn w)
-       nil)))
+     (simple-warning nil nil)))
 
 ;;; FIXME: tests fail even though REPL testing succeeds...
 (deftest basic-constraints ()

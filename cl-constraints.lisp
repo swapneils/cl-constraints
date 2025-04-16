@@ -79,15 +79,15 @@ it exist and be called."
         (and (lookup prop :value-fn)
              (apply (lookup prop :value-fn) funargs)))))
 
-(defmacro declare-property (property symbols
-                            &key
-                              (value t value-provided-p)
-                              (value-fn nil value-fn-provided-p)
-                              (propagates :up)
-                              (compare-fn nil compare-fn-provided-p)
-                              (expand t)
-                              (propagation-spec nil propagation-spec-provided-p)
-                              (propagation-type t))
+(defmacro declare-constraint (property (&rest symbols)
+                              &key
+                                (value t value-provided-p)
+                                (value-fn nil value-fn-provided-p)
+                                (propagates :up)
+                                (compare-fn nil compare-fn-provided-p)
+                                (expand t)
+                                (propagation-spec nil propagation-spec-provided-p)
+                                (propagation-type t))
   "Declares `symbols' to have property `property', which applies
 to every form starting with a symbol in `symbols'.
 
@@ -171,18 +171,18 @@ Defaults to the `cdr' of `form'"
           `(setf (lookup *defaults* ',property) new-map))))
 
 ;;; FIXME: check this works for the special-cases
-;;; in `declare-property'
-(defmacro undeclare-property (property symbols)
+;;; in `declare-constraint'
+(defmacro undeclare-constraint (property symbols)
   "Undeclares `symbols' to have property `property'."
   `(iter (for sym in ',symbols)
      (callf #'less (lookup *symbol-db* sym) ,property)))
 
-(defmacro declare-property* (declarations)
-  "Accepts multiple different argument lists, each of which is called as in `declare-property'"
+(defmacro declare-constraint* (declarations)
+  "Accepts multiple different argument lists, each of which is called as in `declare-constraint'"
   (when declarations
     `(progn
        ,(iter (for dec in declarations)
-          (collecting `(declare-property ,@dec))))))
+          (collecting `(declare-constraint ,@dec))))))
 
 (defparameter *constraint-context* (map)
   "Tracks the context within a `constrain' form")
@@ -565,64 +565,64 @@ the properties and "
     `(progn ,targ-form ,@type-forms)))
 
 ;;; Default declarations
-(declare-property nil (assert-constraint)
-                  ;; Replicate the behavior for `progn'
-                  ;; :value t
-                  :value-fn
-                  (lambda (form env)
-                    (declare (ignore env))
-                    (*let ((asserted-prop (second form))
-                           (asserted-value t)
-                           (value t))
-                      (when (listp asserted-prop)
-                        (let ((keys-plist (rest asserted-prop)))
-                          ;; Get the property from the first element of the config
-                          (callf #'first asserted-prop)
-                          ;; Get the intended value if it's configured
-                          (setf asserted-value (getf keys-plist :value
-                                                     ;; Default to the current value
-                                                     asserted-value))))
-                      (when (eql asserted-prop (lookup *constraint-context* :property))
-                        (setf value asserted-value))
-                      value))
-                  :expand nil
-                  :propagation-spec
-                  (lambda (form env)
-                    (declare (ignore env))
-                    (*let ((asserted-prop (second form)))
-                      (when (listp asserted-prop)
-                        (callf #'first asserted-prop))
-                      ;; When the assertion equals the property asserted,
-                      ;; we don't care about the body
-                      (unless (eql asserted-prop (lookup *constraint-context* :property))
-                        ;; Otherwise return the body
-                        (cddr form)))))
-(declare-property nil (progn prog1 prog2)
-                  :value t)
-(declare-property nil (locally)
-                  :value t
-                  ;; :propagation-spec #'locally-propagation-spec
-                  :expand #'locally-expansion)
-(declare-property nil (let)
-                  :expand nil
-                  :propagation-spec #'let-propagation-spec)
-(declare-property nil (let)
-                  :expand #'let*-expansion)
-(declare-property nil (the)
-                  :value t
-                  :propagation-spec #'the-propagation-spec)
-(declare-property nil (typecase etypecase)
-                  :value t
-                  ;; :propagation-spec #'typecase-propagation-spec
-                  :expand #'typecase-expansion)
-(declare-property nil (cond)
-                  :value t
-                  :propagation-spec #'cond-propagation-spec)
+(declare-constraint nil (assert-constraint)
+                    ;; Replicate the behavior for `progn'
+                    ;; :value t
+                    :value-fn
+                    (lambda (form env)
+                      (declare (ignore env))
+                      (*let ((asserted-prop (second form))
+                             (asserted-value t)
+                             (value t))
+                        (when (listp asserted-prop)
+                          (let ((keys-plist (rest asserted-prop)))
+                            ;; Get the property from the first element of the config
+                            (callf #'first asserted-prop)
+                            ;; Get the intended value if it's configured
+                            (setf asserted-value (getf keys-plist :value
+                                                       ;; Default to the current value
+                                                       asserted-value))))
+                        (when (eql asserted-prop (lookup *constraint-context* :property))
+                          (setf value asserted-value))
+                        value))
+                    :expand nil
+                    :propagation-spec
+                    (lambda (form env)
+                      (declare (ignore env))
+                      (*let ((asserted-prop (second form)))
+                        (when (listp asserted-prop)
+                          (callf #'first asserted-prop))
+                        ;; When the assertion equals the property asserted,
+                        ;; we don't care about the body
+                        (unless (eql asserted-prop (lookup *constraint-context* :property))
+                          ;; Otherwise return the body
+                          (cddr form)))))
+(declare-constraint nil (progn prog1 prog2)
+                    :value t)
+(declare-constraint nil (locally)
+                    :value t
+                    ;; :propagation-spec #'locally-propagation-spec
+                    :expand #'locally-expansion)
+(declare-constraint nil (let)
+                    :expand nil
+                    :propagation-spec #'let-propagation-spec)
+(declare-constraint nil (let)
+                    :expand #'let*-expansion)
+(declare-constraint nil (the)
+                    :value t
+                    :propagation-spec #'the-propagation-spec)
+(declare-constraint nil (typecase etypecase)
+                    :value t
+                    ;; :propagation-spec #'typecase-propagation-spec
+                    :expand #'typecase-expansion)
+(declare-constraint nil (cond)
+                    :value t
+                    :propagation-spec #'cond-propagation-spec)
 
-;; Serapeum default declarations
-(declare-property nil (serapeum::truly-the)
-                  :value t
-                  :propagation-spec #'the-propagation-spec)
+;;; Serapeum default declarations
+(declare-constraint nil (serapeum::truly-the)
+                    :value t
+                    :propagation-spec #'the-propagation-spec)
 (defun with-subtype-dispatch-expansion (form env)
   (declare (ignore env))
   (let ((var (fourth form))
@@ -647,140 +647,150 @@ the properties and "
            ;;       (for type in (append possible-types `(,known-type)))
            ;;       (collecting `(,type ,@body))))
            ))))
-(declare-property nil (with-subtype-dispatch)
-                  :expand #'with-subtype-dispatch-expansion)
+(declare-constraint nil (with-subtype-dispatch)
+                    :expand #'with-subtype-dispatch-expansion)
 
-(declare-property :non-mutating nil :compare-fn #'cut-compare-fn)
-(declare-property :non-mutating (:atom))
-(declare-property :non-mutating (:symbol))
-(declare-property :non-mutating (print) :value-fn (lambda (form env) (declare (ignore env)) (if (third form) nil t)))
-(declare-property :non-mutating (
-                                 ;; Control flow functions
-                                 identity
-                                 ;; List predicates
-                                 null
-                                 ;; Sequence predicates
-                                 emptyp
-                                 fset:sort
-                                 ;; Numeric predicates
-                                 < <= > >= =
-                                 abs
-                                 ;; Boolean predicates
-                                 and or if when unless
-                                 ;; Type predicates
-                                 listp consp
-                                 vectorp arrayp
-                                 integerp rationalp floatp realp numberp
-                                 symbolp packagep
-                                 typep
-                                 ;; List operators
-                                 first cl:first second third fourth fifth sixth seventh eighth ninth tenth
-                                 cl:last fset:last
-                                 rest
-                                 nth nthcdr
-                                 ;; car and friends
-                                 (iter outer (for len from 1 to 5)
-                                   (iter
-                                     (iter:with num-to-string-format =
-                                                (str:concat "~" (write-to-string len) ",'0b"))
-                                     (for i below (expt 2 len))
+;;; Non-mutating
+(declare-constraint :non-mutating nil :compare-fn #'cut-compare-fn)
+(declare-constraint :non-mutating (:atom))
+(declare-constraint :non-mutating (:symbol))
+(declare-constraint :non-mutating (print) :value-fn (lambda (form env) (declare (ignore env)) (if (third form) nil t)))
+(declare-constraint :non-mutating (
+                                   ;; Control flow functions
+                                   identity
+                                   ;; List predicates
+                                   null
+                                   ;; Sequence predicates
+                                   emptyp
+                                   fset:sort
+                                   ;; Numeric predicates
+                                   < <= > >= =
+                                   abs
+                                   zerop
+                                   ;; Boolean predicates
+                                   and or if when unless
+                                   ;; Type predicates
+                                   listp consp
+                                   vectorp arrayp
+                                   integerp rationalp floatp realp complexp numberp
+                                   symbolp packagep
+                                   typep
+                                   ;; List operators
+                                   first cl:first second third fourth fifth sixth seventh eighth ninth tenth
+                                   cl:last fset:last
+                                   rest
+                                   nth nthcdr
+                                   ;; car and friends
+                                   (iter outer (for len from 1 to 5)
+                                     (iter
+                                       (iter:with num-to-string-format =
+                                                  (str:concat "~" (write-to-string len) ",'0b"))
+                                       (for i below (expt 2 len))
 
-                                     (for i-str = (format nil num-to-string-format i))
-                                     (for mid-str = (~>> i-str
-                                                         (str:replace-all "0" "a")
-                                                         (str:replace-all "1" "d")))
-                                     (for sym = (find-symbol (str:upcase (str:concat "c" mid-str "r")) :cl))
-                                     (when sym
-                                       (in outer (collecting sym)))))
-                                 append concatenate
-                                 ;; Array operators
-                                 make-array aref
-                                 ;; Sequence operators
-                                 length elt
-                                 ;; Numeric operators
-                                 + - * /
-                                 ))
-(declare-property :non-mutating (let) :expand nil :propagation-spec #'let-propagation-spec)
+                                       (for i-str = (format nil num-to-string-format i))
+                                       (for mid-str = (~>> i-str
+                                                           (str:replace-all "0" "a")
+                                                           (str:replace-all "1" "d")))
+                                       (for sym = (find-symbol (str:upcase (str:concat "c" mid-str "r")) :cl))
+                                       (when sym
+                                         (in outer (collecting sym)))))
+                                   append concatenate
+                                   ;; Array operators
+                                   make-array aref
+                                   ;; Sequence operators
+                                   length elt
+                                   ;; Numeric operators
+                                   + - * /
+                                   ))
+(declare-constraint :non-mutating (let) :expand nil :propagation-spec #'let-propagation-spec)
 
-(declare-property :non-consing nil :compare-fn #'cut-compare-fn)
-(declare-property :non-consing (:atom))
-(declare-property :non-consing (:symbol))
-(declare-property :non-consing (
-                                ;; Control flow functions
-                                identity
-                                ;; Destructive :non-consing operators
-                                nreverse
-                                nconc nreconc
-                                delete delete-if delete-if-not delete-duplicates
-                                nsubstitute nsubstitute-if nsubstitute-if-not
-                                nsublis nsubst nsubst-if nsubst-if-not
-                                nbutlast
-                                nsplice-seq nsplice-seqf
-                                ;; List predicates
-                                null
-                                ;; Numeric predicates
-                                < <= > >= =
-                                ;; Boolean predicates
-                                and or if when unless
-                                ;; Type predicates
-                                listp consp
-                                vectorp arrayp
-                                integerp rationalp floatp realp numberp
-                                symbolp packagep
-                                ;; List operators
-                                cl:first second third fourth fifth sixth seventh eighth ninth tenth
-                                cl:last
-                                rest
-                                nth nthcdr
-                                ;; car and friends
-                                (iter outer (for len from 1 to 5)
-                                  (iter
-                                    (iter:with num-to-string-format =
-                                               (str:concat "~" (write-to-string len) ",'0b"))
-                                    (for i below (expt 2 len))
+(declare-constraint :non-mutating
+                    (positive-fixnum-p negative-fixnum-p non-positive-fixnum-p non-negative-fixnum-p
+                                       positive-integer-p negative-integer-p non-positive-integer-p non-negative-integer-p
+                                       positive-rational-p negative-rational-p non-positive-rational-p non-negative-rational-p
+                                       positive-real-p negative-real-p non-positive-real-p non-negative-real-p
+                                       positive-float-p negative-float-p non-positive-float-p non-negative-float-p))
 
-                                    (for i-str = (format nil num-to-string-format i))
-                                    (for mid-str = (~>> i-str
-                                                        (str:replace-all "0" "a")
-                                                        (str:replace-all "1" "d")))
-                                    (for sym = (find-symbol (str:upcase (str:concat "c" mid-str "r")) :cl))
-                                    (when sym
-                                      (in outer (collecting sym)))))
-                                ;; Array operators
-                                aref
-                                ;; Sequence operators
-                                elt
-                                ;; length ;; Is this really non-consing?
-                                ))
+;;; Non-consing
+(declare-constraint :non-consing nil :compare-fn #'cut-compare-fn)
+(declare-constraint :non-consing (:atom))
+(declare-constraint :non-consing (:symbol))
+(declare-constraint :non-consing (
+                                  ;; Control flow functions
+                                  identity
+                                  ;; Destructive :non-consing operators
+                                  nreverse
+                                  nconc nreconc
+                                  delete delete-if delete-if-not delete-duplicates
+                                  nsubstitute nsubstitute-if nsubstitute-if-not
+                                  nsublis nsubst nsubst-if nsubst-if-not
+                                  nbutlast
+                                  nsplice-seq nsplice-seqf
+                                  ;; List predicates
+                                  null
+                                  ;; Numeric predicates
+                                  < <= > >= =
+                                  ;; Boolean predicates
+                                  and or if when unless
+                                  ;; Type predicates
+                                  listp consp
+                                  vectorp arrayp
+                                  integerp rationalp floatp realp complexp numberp
+                                  symbolp packagep
+                                  ;; List operators
+                                  cl:first second third fourth fifth sixth seventh eighth ninth tenth
+                                  cl:last
+                                  rest
+                                  nth nthcdr
+                                  ;; car and friends
+                                  (iter outer (for len from 1 to 5)
+                                    (iter
+                                      (iter:with num-to-string-format =
+                                                 (str:concat "~" (write-to-string len) ",'0b"))
+                                      (for i below (expt 2 len))
+
+                                      (for i-str = (format nil num-to-string-format i))
+                                      (for mid-str = (~>> i-str
+                                                          (str:replace-all "0" "a")
+                                                          (str:replace-all "1" "d")))
+                                      (for sym = (find-symbol (str:upcase (str:concat "c" mid-str "r")) :cl))
+                                      (when sym
+                                        (in outer (collecting sym)))))
+                                  ;; Array operators
+                                  aref
+                                  ;; Sequence operators
+                                  elt
+                                  ;; length ;; Is this really non-consing?
+                                  ))
 ;;; Arithmetic operators are only non-consing for fixnum inputs and outputs
 ;;; NOTE: Is this fully correct?
-(declare-property :non-consing (+ - *)
-                  :value-fn
-                  (lambda (form env)
-                    (let ((form-type (strip-values-from-type (form-type form env)))
-                          (arg-types (nest
-                                      (collect 'list)
-                                      (map-fn '(or symbol list null) #'strip-values-from-type)
-                                      (map-fn '(or symbol list null) (rcurry #'form-type env))
-                                      (scan 'list)
-                                      (rest form))))
-                      (nest
-                       ;; If any type is invalid, return false
-                       (not)
-                       (collect 'list)
-                       ;; Find types which are INVALID for :non-consing
-                       (choose-if (op (not (subtypep _ 'fixnum env))))
-                       (scan 'list)
-                       (cons form-type arg-types)))))
-(declare-property :non-consing (abs)
-                  :value-fn
-                  (lambda (form env)
-                    (*let ((targ (second form))
-                           (targ-type (strip-values-from-type (form-type targ env))))
-                      ;; If the expected type of the argument is a `fixnum',
-                      ;; it can be negated without consing
-                      (subtypep targ-type 'fixnum env))))
-(declare-property :non-consing (let) :expand nil :propagation-spec #'let-propagation-spec)
+(declare-constraint :non-consing (+ - *)
+                    :value-fn
+                    (lambda (form env)
+                      (let ((form-type (strip-values-from-type (form-type form env)))
+                            (arg-types (nest
+                                        (collect 'list)
+                                        (map-fn '(or symbol list null) #'strip-values-from-type)
+                                        (map-fn '(or symbol list null) (rcurry #'form-type env))
+                                        (scan 'list)
+                                        (rest form))))
+                        (nest
+                         ;; If any type is invalid, return false
+                         (not)
+                         (collect 'list)
+                         ;; Find types which are INVALID for :non-consing
+                         (choose-if (op (not (subtypep _ 'fixnum env))))
+                         (scan 'list)
+                         (cons form-type arg-types)))))
+(declare-constraint :non-consing (abs)
+                    :value-fn
+                    (lambda (form env)
+                      (*let ((targ (second form))
+                             (targ-type (strip-values-from-type (form-type targ env))))
+                        ;; If the expected type of the argument is a `fixnum',
+                        ;; it can be negated without consing
+                        (subtypep targ-type 'fixnum env))))
+(declare-constraint :non-consing (let) :expand nil :propagation-spec #'let-propagation-spec)
 
 
 (comment
