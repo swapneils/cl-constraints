@@ -36,16 +36,16 @@
                                                         (cdr form)))
                                    (:propagation-type t))))
 
-(defun* get-property (property (target (or symbol list)))
+(defun* get-constraint (constraint (target (or symbol list)))
   (:returns map)
   (let* ((target-props (lookup *symbol-db* target))
          (found-target (nth-value 1 (lookup *symbol-db* target)))
-         (prop-defaults (lookup *defaults* property))
+         (prop-defaults (lookup *defaults* constraint))
          (target-prop
-           ;; If there's an explicit definition for this property,
+           ;; If there's an explicit definition for this constraint,
            ;; use it
-           (cond ((nth-value 1 (lookup target-props property))
-                  (lookup target-props property))
+           (cond ((nth-value 1 (lookup target-props constraint))
+                  (lookup target-props constraint))
                  ((nth-value 1 (lookup target-props nil))
                   (lookup target-props nil))
                  (t (map)))))
@@ -61,25 +61,25 @@
         ;; Symbol not found
         (not found-target))
        ;; Return the value for `:symbol'
-       (get-property property :symbol))
+       (get-constraint constraint :symbol))
       ;; If no special case, merge with the defaults
       ;; to get the final config.
       (t (map ($ prop-defaults) ($ target-prop))))))
 
-(defun* get-property-value (property (target (or symbol list)) &rest funargs)
-  "Gets the value of a property for a specified symbol-spec as stored
+(defun* get-constraint-value (constraint (target (or symbol list)) &rest funargs)
+  "Gets the value of a constraint for a specified symbol-spec as stored
 in `*symbol-db*'.
 First checks for `:value', and if that's unavailable attempts to call
 `:value-fn' (if it exists) to produce a value.
 If provided, `funargs' are passed to the `:value-fn' function, should
 it exist and be called."
-  (let ((prop (get-property property target)))
+  (let ((prop (get-constraint constraint target)))
     (list 'found (lookup prop :value))
     (or (lookup prop :value)
         (and (lookup prop :value-fn)
              (apply (lookup prop :value-fn) funargs)))))
 
-(defmacro declare-constraint (property (&rest symbols)
+(defmacro declare-constraint (constraint (&rest symbols)
                               &key
                                 (value t value-provided-p)
                                 (value-fn nil value-fn-provided-p)
@@ -88,11 +88,11 @@ it exist and be called."
                                 (expand t)
                                 (propagation-spec nil propagation-spec-provided-p)
                                 (propagation-type t))
-  "Declares `symbols' to have property `property', which applies
+  "Declares `symbols' to have constraint `constraint', which applies
 to every form starting with a symbol in `symbols'.
 
-If `property' is `nil' it is assigned as a \"default\" value, to be
-used for `symbols' when they do not have a specific property declaration.
+If `constraint' is `nil' it is assigned as a \"default\" value, to be
+used for `symbols' when they do not have a specific constraint declaration.
 
 If `symbols' includes the keyword `:symbol', this is used to determine
 the default assumption for bare symbols, should they be processed by
@@ -100,7 +100,7 @@ the default assumption for bare symbols, should they be processed by
 If `symbols' includes the keyword `:atom', this is used to determine
 the default assumption for atoms, should they be processed by `constrain'.
 
-`propagates' determines how this property is propagated through code
+`propagates' determines how this constraint is propagated through code
 from each of `symbols'. It is either a keyword, or a list of keywords
 which will all be applied to the form.
 - `:up' propagates from a form to its parents until a parent has
@@ -108,22 +108,22 @@ a value taking priority over the one being propagated.
 - `:down' propagates from a form to its arguments until a child
 has a value taking priority over the one being propagated.
 
-`value' is the value assigned to this property for this form.
+`value' is the value assigned to this constraint for this form.
 Default to `t'.
 
 `compare-fn' determines, if there is a conflict between two
-definitions of `property' for a form (e.g. the default definition
+definitions of `constraint' for a form (e.g. the default definition
 and the propagated one), which value takes precedence. If non-`nil',
 it should be a 3-argument function.
-`compare-fn' is called for both the symbol whose property is being
+`compare-fn' is called for both the symbol whose constraint is being
 propagated and the symbol which is contradicting that propagation. Its
-inputs are the property value of the 'current' form (i.e. the form whose
-symbol `compare-fn' is associated with), the property value from the other
+inputs are the constraint value of the 'current' form (i.e. the form whose
+symbol `compare-fn' is associated with), the constraint value from the other
 source, and a context object.
 The results of both `compare-fn' executions are compared by `fset:compare',
 which returns whichever output is considered `:greater' (or the parent form's
 value if they are `:equal'/`:unequal').
-Defaults to (lambda (a b c) a), i.e. returning the property value of its
+Defaults to (lambda (a b c) a), i.e. returning the constraint value of its
 associated symbol.
 
 `expand' determines, for macros in `symbols', whether those macros are
@@ -164,18 +164,18 @@ Defaults to the `cdr' of `form'"
        (setf (lookup new-map :compare-fn) ,compare-fn))
      (when ,propagation-spec-provided-p
        (setf (lookup new-map :propagation-spec) ,propagation-spec))
-     (setf new-map (map ($ (lookup *defaults* ',property)) ($ new-map)))
+     (setf new-map (map ($ (lookup *defaults* ',constraint)) ($ new-map)))
      ,(if symbols
           `(iter (for sym in symbols)
-             (setf (lookup (lookup *symbol-db* sym) ',property) new-map))
-          `(setf (lookup *defaults* ',property) new-map))))
+             (setf (lookup (lookup *symbol-db* sym) ',constraint) new-map))
+          `(setf (lookup *defaults* ',constraint) new-map))))
 
 ;;; FIXME: check this works for the special-cases
 ;;; in `declare-constraint'
-(defmacro undeclare-constraint (property symbols)
-  "Undeclares `symbols' to have property `property'."
+(defmacro undeclare-constraint (constraint symbols)
+  "Undeclares `symbols' to have constraint `constraint'."
   `(iter (for sym in ',symbols)
-     (callf #'less (lookup *symbol-db* sym) ,property)))
+     (callf #'less (lookup *symbol-db* sym) ,constraint)))
 
 (defmacro declare-constraint* (declarations)
   "Accepts multiple different argument lists, each of which is called as in `declare-constraint'"
@@ -187,44 +187,44 @@ Defaults to the `cdr' of `form'"
 (defparameter *constraint-context* (map)
   "Tracks the context within a `constrain' form")
 
-(defmacro assert-constraint (property &body body)
+(defmacro assert-constraint (constraint &body body)
   "Used to assert a constraint so `constrain' calls matching that constraint don't check `body'"
-  (declare (ignore property))
+  (declare (ignore constraint))
   `(progn ,@body))
 
-(defmacro constrain (&whole form property (&key (report :warn)) &body body &environment env)
-  "Constrains `body' to have property `property'.
+(defmacro constrain (&whole form constraint (&key (report :warn)) &body body &environment env)
+  "Constrains `body' to have constraint `constraint'.
 `body' is considered to be an implicit progn form. Note that this `progn' is taken
-into account for property propagation.
+into account for constraint propagation.
 
 `report' determines how to report the results of `constrain':
 - `:warn' emits a warning at compile time when the constraint is null
 - `:error' emits a warning at compile time and an error at runtime when
 the constraint is null
 - If a 1-arg function, that function is called with the top level value of the
-property to create a response. The return values of this function are ignored.
+constraint to create a response. The return values of this function are ignored.
 Note that if `body' has multiple forms, the result of `compare-fn'
 the properties and "
   (let* ((constrain-form (if (> (length body) 1)
                              `(progn ,@body)
                              (first body)))
          ;; Refresh `*constraint-context*'
-         (*constraint-context* (map (:property property)
+         (*constraint-context* (map (:constraint constraint)
                                     (:forms (map))))
-         (valid (constrain-internal property (map) constrain-form env)))
+         (valid (constrain-internal constraint (map) constrain-form env)))
     (if (functionp report)
         (funcall report valid)
         (unless valid
           (case report
             ;; TODO: Make a custom warning class
-            (:warn (warn "failed to constrain property ~A~%Form:~%~A~%Subforms with property not known to be true:~%~{~A~%~}~%"
-                         property form
+            (:warn (warn "failed to constrain constraint ~A~%Form:~%~A~%Subforms with constraint not known to be true:~%~{~A~%~}~%"
+                         constraint form
                          (sort (convert 'list (filter (op (not _2)) (lookup *constraint-context* :forms)) :pair-fn (op _2 _1))
                                #'<
                                :key (op (length (format nil "~A" _))))))
             ;; TODO: Make a custom error class
-            (:error (error "failed to constrain property ~A~%Form:~%~A~%Subforms with property not known to be true:~%~{~A~%~}~%"
-                           property form
+            (:error (error "failed to constrain constraint ~A~%Form:~%~A~%Subforms with constraint not known to be true:~%~{~A~%~}~%"
+                           constraint form
                            (sort (convert 'list (filter (op (not _2))
                                                         (lookup *constraint-context* :forms))
                                           :pair-fn (op _2 _1))
@@ -236,7 +236,7 @@ the properties and "
                    valid
                    form)))))
     constrain-form))
-(defun* constrain-internal ((property symbol) (config map) original-form env
+(defun* constrain-internal ((constraint symbol) (config map) original-form env
                             &optional propagate-down propagate-down-value
                             &aux
                             (form original-form)
@@ -247,38 +247,38 @@ the properties and "
                             ;; lexical information
                             (*symbol-db* *symbol-db*))
   (declare (ignorable config))
-  ;; (print (list property form (when (listp form) (get-property-value property form form env))))
+  ;; (print (list constraint form (when (listp form) (get-constraint-value constraint form form env))))
 
   ;; Special cases
   (block constrain-internal
     (cond
       ((symbolp form)
-       (let* ((prop (get-property property :symbol))
+       (let* ((prop (get-constraint constraint :symbol))
               (up-prop (lookup prop :propagates))
               (up-prop (or (eql up-prop :up)
                            (and (listp up-prop)
                                 (member :up up-prop))))
               (target `(:symbol ,form)))
          (return-from constrain-internal (if up-prop
-                                             (values (get-property-value property target form env) target)
-                                             (get-property-value property target form env)))))
+                                             (values (get-constraint-value constraint target form env) target)
+                                             (get-constraint-value constraint target form env)))))
       ((or
         (atom form)
         (and (listp form) (eql (first form) 'quote)))
-       (let* ((prop (get-property property :atom))
+       (let* ((prop (get-constraint constraint :atom))
               (up-prop (lookup prop :propagates))
               (up-prop (or (eql up-prop :up)
                            (and (listp up-prop)
                                 (member :up up-prop)))))
          (return-from constrain-internal
            (if up-prop
-               (values (get-property-value property :atom form env) :atom)
-               (get-property-value property :atom form env)))))
+               (values (get-constraint-value constraint :atom form env) :atom)
+               (get-constraint-value constraint :atom form env)))))
       ((not (listp form)) (return-from constrain-internal (values nil nil))))
 
     (iter
       (setf sym (first form))
-      (for expand-prop = (lookup (get-property property sym) :expand))
+      (for expand-prop = (lookup (get-constraint constraint sym) :expand))
       (for expand-func = (or (and (functionp expand-prop) expand-prop)
                              (and (symbolp sym) (macro-function sym))))
       (cond
@@ -301,10 +301,10 @@ the properties and "
         (t (return))))
 
     (nest
-     (flet* ((compare-properties
+     (flet* ((compare-constraint-values
               ((s1 (or symbol list)) v1 (s2 (or symbol list)) v2 &key (direction nil))
-              (*let ((p1 map (get-property property s1))
-                     (p2 map (get-property property s2))
+              (*let ((p1 map (get-constraint constraint s1))
+                     (p2 map (get-constraint constraint s2))
                      (c1 (or function null) (lookup p1 :compare-fn))
                      (c2 (or function null) (lookup p2 :compare-fn))
                      (context map
@@ -327,15 +327,15 @@ the properties and "
                     ((equal? v1 v2)
                      v1)
                     (t
-                     (warn "encountered unequal but incomparable values for property ~A!~%sym: ~A, value: ~A~%sym: ~A, value: ~A~%~%"
-                           property
+                     (warn "encountered unequal but incomparable values for constraint ~A!~%sym: ~A, value: ~A~%sym: ~A, value: ~A~%~%"
+                           constraint
                            s1 v1 s2 v2)
                      v1)))))))
-     (*let ((prop map (get-property property sym))
-            (current-prop-value (get-property-value property sym form env))
+     (*let ((prop map (get-constraint constraint sym))
+            (current-prop-value (get-constraint-value constraint sym form env))
             (current-prop-value
              (if propagate-down
-                 (compare-properties
+                 (compare-constraint-values
                   sym current-prop-value
                   propagate-down propagate-down-value)
                  ;; Don't modify if there's no down-propagation going on
@@ -370,16 +370,16 @@ the properties and "
                        (lambda (subform)
                          (multiple-value-list
                           (if propagate-down?
-                              (constrain-internal property config subform env
+                              (constrain-internal constraint config subform env
                                                   sym current-prop-value)
-                              (constrain-internal property config subform env))))
+                              (constrain-internal constraint config subform env))))
                        (scan 'list valid-subforms))))
             ;; (_ (print (list "recurse" recurse-results)))
             (current-prop-value
              (collect-fn
               t (constantly current-prop-value)
               (lambda (curr result)
-                (compare-properties
+                (compare-constraint-values
                  sym curr
                  ;; Returned symbol
                  (second result)
@@ -571,30 +571,30 @@ the properties and "
                     :value-fn
                     (lambda (form env)
                       (declare (ignore env))
-                      (*let ((asserted-prop (second form))
+                      (*let ((asserted-constraint (second form))
                              (asserted-value t)
                              (value t))
-                        (when (listp asserted-prop)
-                          (let ((keys-plist (rest asserted-prop)))
-                            ;; Get the property from the first element of the config
-                            (callf #'first asserted-prop)
+                        (when (listp asserted-constraint)
+                          (let ((keys-plist (rest asserted-constraint)))
+                            ;; Get the constraint from the first element of the config
+                            (callf #'first asserted-constraint)
                             ;; Get the intended value if it's configured
                             (setf asserted-value (getf keys-plist :value
                                                        ;; Default to the current value
                                                        asserted-value))))
-                        (when (eql asserted-prop (lookup *constraint-context* :property))
+                        (when (eql asserted-constraint (lookup *constraint-context* :constraint))
                           (setf value asserted-value))
                         value))
                     :expand nil
                     :propagation-spec
                     (lambda (form env)
                       (declare (ignore env))
-                      (*let ((asserted-prop (second form)))
-                        (when (listp asserted-prop)
-                          (callf #'first asserted-prop))
-                        ;; When the assertion equals the property asserted,
+                      (*let ((asserted-constraint (second form)))
+                        (when (listp asserted-constraint)
+                          (callf #'first asserted-constraint))
+                        ;; When the assertion equals the constraint asserted,
                         ;; we don't care about the body
-                        (unless (eql asserted-prop (lookup *constraint-context* :property))
+                        (unless (eql asserted-constraint (lookup *constraint-context* :constraint))
                           ;; Otherwise return the body
                           (cddr form)))))
 (declare-constraint nil (progn prog1 prog2)
@@ -813,5 +813,5 @@ the properties and "
   ;; TODO: Merge configs with the stack of default configs, rather than
   ;; using a switch based on whether values are available or not
   ;; NOTE: This is partly done, but I don't think we incorporate *both*
-  ;; of the symbol default and the property default
+  ;; of the symbol default and the constraint default
   )
