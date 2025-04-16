@@ -1,5 +1,9 @@
 #+title: CL Constraints
 
+Project status: ~cl-constraints~ is currently in development! The API is not stable, and
+the default models and propagation rules are constantly being refined. Use in production
+at your own risk.
+
 ~cl-constraints~ is a library to provide lightweight static code checking for Common Lisp.
 
 Most CL static code verifiers are intrinsically tied to interacting with a type system. Either
