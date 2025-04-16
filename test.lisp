@@ -72,4 +72,47 @@
   (is
    (not
     (no-constrain-errors
-     (constrain :non-consing nil (let ((c (append a b))) (prog1 c)))))))
+     (constrain :non-consing nil (let ((c (append a b))) (prog1 c))))))
+  (is (equal
+       (let ((a 3) (b 3) (threshold 0.0001))
+         (let ((c (- a b)))
+           (constrain :non-consing nil
+             (serapeum:nest
+              (serapeum:with-subtype-dispatch number (fixnum ratio single-float double-float) a)
+              (serapeum:with-subtype-dispatch number (fixnum ratio single-float double-float) b)
+              (or (= a b)
+                  ;; For floats, also allow them to be "close enough"
+                  (and (floatp a) (floatp b)
+                       (<= (assert-constraint :non-consing (abs c)) threshold)))))))
+       t))
+  (is
+   (not
+    (no-constrain-errors
+     (constrain :non-consing nil
+       (serapeum:nest
+        (serapeum:with-subtype-dispatch number (fixnum ratio single-float double-float) a)
+        (serapeum:with-subtype-dispatch number (fixnum ratio single-float double-float) b)
+        (or (= a b)
+            ;; For floats, also allow them to be "close enough"
+            (and (floatp a) (floatp b)
+                 (<= (assert-constraint (:non-consing :value nil) (abs c)) threshold))))))))
+  (is
+   (no-constrain-errors
+    (constrain :non-consing nil
+      (serapeum:nest
+       (serapeum:with-subtype-dispatch number (fixnum ratio single-float double-float) a)
+       (serapeum:with-subtype-dispatch number (fixnum ratio single-float double-float) b)
+       (or (= a b)
+           ;; For floats, also allow them to be "close enough"
+           (and (floatp a) (floatp b)
+                (<= (assert-constraint (:non-consing) (abs c)) threshold)))))))
+  (is
+   (no-constrain-errors
+    (constrain :non-consing nil
+      (serapeum:nest
+       (serapeum:with-subtype-dispatch number (fixnum ratio single-float double-float) a)
+       (serapeum:with-subtype-dispatch number (fixnum ratio single-float double-float) b)
+       (or (= a b)
+           ;; For floats, also allow them to be "close enough"
+           (and (floatp a) (floatp b)
+                (<= (assert-constraint :non-consing (abs c)) threshold))))))))
