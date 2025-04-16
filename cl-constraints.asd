@@ -31,8 +31,4 @@
    "try")
   :components
   ((:file "test"))
-  :perform (test-op
-            (o c)
-            (uiop:symbol-call :try :try
-                              (find-symbol "basic-constraints" :cl-constraints/test)
-                                   :print nil)))
+  :perform (test-op (o c) (uiop:symbol-call :cl-constraints/test :basic-constraints)))
