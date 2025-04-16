@@ -567,18 +567,31 @@ the properties and "
 ;;; Default declarations
 (declare-property nil (assert-constraint)
                   ;; Replicate the behavior for `progn'
-                  :value t
-                  ;; :value-fn
-                  ;; (lambda (form env)
-                  ;;   (declare (ignore env))
-                  ;;   (*let ((asserted-prop (second form)))
-                  ;;     ;; The assertion equals the property asserted
-                  ;;     (eql asserted-prop (lookup *constraint-context* :property))))
+                  ;; :value t
+                  :value-fn
+                  (lambda (form env)
+                    (declare (ignore env))
+                    (*let ((asserted-prop (second form))
+                           (asserted-value t)
+                           (value t))
+                      (when (listp asserted-prop)
+                        (let ((keys-plist (rest asserted-prop)))
+                          ;; Get the property from the first element of the config
+                          (callf #'first asserted-prop)
+                          ;; Get the intended value if it's configured
+                          (setf asserted-value (getf keys-plist :value
+                                                     ;; Default to the current value
+                                                     asserted-value))))
+                      (when (eql asserted-prop (lookup *constraint-context* :property))
+                        (setf value asserted-value))
+                      value))
                   :expand nil
                   :propagation-spec
                   (lambda (form env)
                     (declare (ignore env))
                     (*let ((asserted-prop (second form)))
+                      (when (listp asserted-prop)
+                        (callf #'first asserted-prop))
                       ;; When the assertion equals the property asserted,
                       ;; we don't care about the body
                       (unless (eql asserted-prop (lookup *constraint-context* :property))
@@ -635,7 +648,6 @@ the properties and "
            ;;       (collecting `(,type ,@body))))
            ))))
 (declare-property nil (with-subtype-dispatch)
-                  :value t
                   :expand #'with-subtype-dispatch-expansion)
 
 (declare-property :non-mutating nil :compare-fn #'cut-compare-fn)
