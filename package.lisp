@@ -12,4 +12,5 @@
   (:nicknames "constraints")
   (:export #:declare-property #:declare-property*
            #:undeclare-property
-           #:constrain))
+           #:constrain
+           #:assert-constraint))

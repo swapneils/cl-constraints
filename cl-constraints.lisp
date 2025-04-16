@@ -187,6 +187,11 @@ Defaults to the `cdr' of `form'"
 (defparameter *constraint-context* (map)
   "Tracks the context within a `constrain' form")
 
+(defmacro assert-constraint (property &body body)
+  "Used to assert a constraint so `constrain' calls matching that constraint don't check `body'"
+  (declare (ignore property))
+  `(progn ,@body))
+
 (defmacro constrain (&whole form property (&key (report :warn)) &body body &environment env)
   "Constrains `body' to have property `property'.
 `body' is considered to be an implicit progn form. Note that this `progn' is taken
@@ -204,7 +209,8 @@ the properties and "
                              `(progn ,@body)
                              (first body)))
          ;; Refresh `*constraint-context*'
-         (*constraint-context* (map))
+         (*constraint-context* (map (:property property)
+                                    (:forms (map))))
          (valid (constrain-internal property (map) constrain-form env)))
     (if (functionp report)
         (funcall report valid)
@@ -213,13 +219,17 @@ the properties and "
             ;; TODO: Make a custom warning class
             (:warn (warn "failed to constrain property ~A~%Form:~%~A~%Subforms with property not known to be true:~%~{~A~%~}~%"
                          property form
-                         (convert 'list (filter (op (not _2)) *constraint-context*)
-                                  :pair-fn (op _2 _1))))
+                         (sort (convert 'list (filter (op (not _2)) (lookup *constraint-context* :forms)) :pair-fn (op _2 _1))
+                               #'<
+                               :key (op (length (format nil "~A" _))))))
             ;; TODO: Make a custom error class
             (:error (error "failed to constrain property ~A~%Form:~%~A~%Subforms with property not known to be true:~%~{~A~%~}~%"
                            property form
-                           (convert 'list (filter (op (not _2)) *constraint-context*)
-                                    :pair-fn (op _2 _1))))
+                           (sort (convert 'list (filter (op (not _2))
+                                                        (lookup *constraint-context* :forms))
+                                          :pair-fn (op _2 _1))
+                                 #'<
+                                 :key (op (length (format nil "~A" _))))))
             (otherwise
              (warn "Invalid report configuration for `constrain' form!~%Report config: ~A~%Validity: ~A~%Form:~%~A~%"
                    report
@@ -376,7 +386,7 @@ the properties and "
                  ;; Returned value
                  (first result)))
               (choose-if #'second (scan 'list recurse-results)))))
-       (setf (lookup *constraint-context* original-form) current-prop-value)
+       (setf (lookup (lookup *constraint-context* :forms) original-form) current-prop-value)
        (if propagate-up?
            (values current-prop-value sym)
            (values current-prop-value))))))
@@ -448,13 +458,13 @@ the properties and "
                    optional-args
                    rest-arg
                    keyword-args
-                   lambda-allow-other-keys
+                   _
                    aux-args
-                   has-key-args)
+                   _)
           (parse-ordinary-lambda-list lambda-args))
          ((:values lambda-body
                    lambda-declare
-                   lambda-docstring)
+                   _)
           (parse-body (cddr form) :documentation t)))
     (*let (
            ;; Extract declarations from the `declare' form
@@ -486,7 +496,7 @@ the properties and "
                :declare `((type ,aux-form-type ,aux-name)))))
 
       ;; Apply the explicit declarations from the lambda
-      (setf env (augment-environment lambda-declare))
+      (setf env (augment-environment env :declare (cdar lambda-declare)))
 
       ;; Return the lambda body and modified environment
       (values lambda-body env))))
@@ -499,10 +509,82 @@ the properties and "
   (declare (ignore env))
   (list (third form)))
 
+;;; FIXME: Seeing errors in SBCL
+(defun locally-propagation-spec
+    (form env)
+  ;; (print form)
+  (*let (((:values body declaration _) (parse-body (cdr form))))
+    (when declaration
+      ;; (augment-environment env :declare '((type integer a)))
+      ;; (print "don1")
+      ;; (augment-environment env :declare (cdar declaration))
+      ;; (print "don")
+      (setf env
+            (augment-environment env
+                                 :declare (cdar declaration))))
+    (values body env)))
+;;; NOTE: Hack to ignore locally entirely since it's causing issues
+(defun locally-expansion
+    (form env)
+  (declare (ignore env))
+  (*let (((:values body _ _) (parse-body (cdr form))))
+    `(progn ,@body)))
+
+(defun cond-propagation-spec (form env)
+  (declare (ignore env))
+  ;; Return a list of all the sub-forms converted to progns
+  ;; NOTE: Ideally we'd have some way to nest type propagation
+  ;; so we could modify the env when within a specific
+  ;; sub-case. Too much work though.
+  (image (op `(progn ,@_)) (cdr form)))
+
+;; NOTE: Doesn't account for type information!
+;; (defun typecase-propagation-spec
+;;     (form env)
+;;   (declare (ignore env))
+;;   (*let ((targ-form (second form))
+;;          (type-forms (image
+;;                       ;; Replace the type spec with `progn'
+;;                       (op (cons 'progn (cdr _)))
+;;                       (cddr form))))
+;;     ;; Return both the target form and all the dispatched forms
+;;     (cons targ-form type-forms)))
+
+(defun typecase-expansion (form env)
+  (declare (ignore env))
+  (*let ((targ-form (second form))
+         (type-forms (image
+                      ;; Replace the type spec with `progn'
+                      (op (cons 'progn (cdr _)))
+                      (cddr form))))
+    ;; Return both the target form and all the dispatched forms
+    ;; as a single `progn'
+    `(progn ,targ-form ,@type-forms)))
 
 ;;; Default declarations
+(declare-property nil (assert-constraint)
+                  :value-fn
+                  (lambda (form env)
+                    (declare (ignore env))
+                    (*let ((asserted-prop (second form)))
+                      ;; The assertion equals the property asserted
+                      (eql asserted-prop (lookup *constraint-context* :property))))
+                  :expand nil
+                  :propagation-spec
+                  (lambda (form env)
+                    (declare (ignore env))
+                    (*let ((asserted-prop (second form)))
+                      ;; When the assertion equals the property asserted,
+                      ;; we don't care about the body
+                      (unless (eql asserted-prop (lookup *constraint-context* :property))
+                        ;; Otherwise return the body
+                        (cddr form)))))
 (declare-property nil (progn prog1 prog2)
                   :value t)
+(declare-property nil (locally)
+                  :value t
+                  ;; :propagation-spec #'locally-propagation-spec
+                  :expand #'locally-expansion)
 (declare-property nil (let)
                   :expand nil
                   :propagation-spec #'let-propagation-spec)
@@ -511,6 +593,45 @@ the properties and "
 (declare-property nil (the)
                   :value t
                   :propagation-spec #'the-propagation-spec)
+(declare-property nil (typecase etypecase)
+                  :value t
+                  ;; :propagation-spec #'typecase-propagation-spec
+                  :expand #'typecase-expansion)
+(declare-property nil (cond)
+                  :value t
+                  :propagation-spec #'cond-propagation-spec)
+
+;; Serapeum default declarations
+(declare-property nil (serapeum::truly-the)
+                  :value t
+                  :propagation-spec #'the-propagation-spec)
+(defun with-subtype-dispatch-expansion (form env)
+  (declare (ignore env))
+  (let ((var (fourth form))
+        (known-type (second form))
+        (possible-types (third form))
+        (body (nthcdr 4 form)))
+    (if (not possible-types)
+        ;; No typecase if we don't do dispatch
+        `(locally
+             (declare (type ,known-type ,var))
+           ,@body)
+        ;; Copy the body for each dispatched type
+        ;; if we are doing dispatch
+        `(locally
+             (declare (type ,known-type ,var))
+           ;; Body is identical across variants, and
+           ;; expansions ignore local type info, so
+           ;; we may as well get rid of the duplication
+           (progn ,var ,@body)
+           ;; (etypecase ,var
+           ;;   ,@(iter
+           ;;       (for type in (append possible-types `(,known-type)))
+           ;;       (collecting `(,type ,@body))))
+           ))))
+(declare-property nil (with-subtype-dispatch)
+                  :value t
+                  :expand #'with-subtype-dispatch-expansion)
 
 (declare-property :non-mutating nil :compare-fn #'cut-compare-fn)
 (declare-property :non-mutating (:atom))
@@ -526,6 +647,7 @@ the properties and "
                                  fset:sort
                                  ;; Numeric predicates
                                  < <= > >= =
+                                 abs
                                  ;; Boolean predicates
                                  and or if when unless
                                  ;; Type predicates
@@ -533,6 +655,7 @@ the properties and "
                                  vectorp arrayp
                                  integerp rationalp floatp realp numberp
                                  symbolp packagep
+                                 typep
                                  ;; List operators
                                  first cl:first second third fourth fifth sixth seventh eighth ninth tenth
                                  cl:last fset:last
@@ -632,6 +755,14 @@ the properties and "
                        (choose-if (op (not (subtypep _ 'fixnum env))))
                        (scan 'list)
                        (cons form-type arg-types)))))
+(declare-property :non-consing (abs)
+                  :value-fn
+                  (lambda (form env)
+                    (*let ((targ (second form))
+                           (targ-type (strip-values-from-type (form-type targ env))))
+                      ;; If the expected type of the argument is a `fixnum',
+                      ;; it can be negated without consing
+                      (subtypep targ-type 'fixnum env))))
 (declare-property :non-consing (let) :expand nil :propagation-spec #'let-propagation-spec)
 
 
