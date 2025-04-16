@@ -27,7 +27,12 @@
   :license "MIT"
   :version "0.0.1"
   :depends-on
-  ("cl-constraints")
+  ("cl-constraints"
+   "try")
   :components
   ((:file "test"))
-  :perform (test-op (o c) (uiop:symbol-call :cl-constraints/test :basic-constraints)))
+  :perform (test-op
+            (o c)
+            (uiop:symbol-call :try :try
+                              (find-symbol "basic-constraints" :cl-constraints/test)
+                                   :print nil)))
