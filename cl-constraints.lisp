@@ -79,7 +79,7 @@ it exist and be called."
         (and (lookup prop :value-fn)
              (apply (lookup prop :value-fn) funargs)))))
 
-(defmacro declare-constraint (constraint (&rest symbols)
+(defmacro define-constraint (constraint (&rest symbols)
                               &key
                                 (value t value-provided-p)
                                 (value-fn nil value-fn-provided-p)
@@ -171,23 +171,23 @@ Defaults to the `cdr' of `form'"
           `(setf (lookup *defaults* ',constraint) new-map))))
 
 ;;; FIXME: check this works for the special-cases
-;;; in `declare-constraint'
-(defmacro undeclare-constraint (constraint symbols)
+;;; in `define-constraint'
+(defmacro undefine-constraint (constraint symbols)
   "Undeclares `symbols' to have constraint `constraint'."
   `(iter (for sym in ',symbols)
      (callf #'less (lookup *symbol-db* sym) ,constraint)))
 
-(defmacro declare-constraint* (declarations)
-  "Accepts multiple different argument lists, each of which is called as in `declare-constraint'"
+(defmacro define-constraint* (declarations)
+  "Accepts multiple different argument lists, each of which is called as in `define-constraint'"
   (when declarations
     `(progn
        ,(iter (for dec in declarations)
-          (collecting `(declare-constraint ,@dec))))))
+          (collecting `(define-constraint ,@dec))))))
 
 (defparameter *constraint-context* (map)
   "Tracks the context within a `constrain' form")
 
-(defmacro assert-constraint (constraint &body body)
+(defmacro declare-constraint (constraint &body body)
   "Used to assert a constraint so `constrain' calls matching that constraint don't check `body'"
   (declare (ignore constraint))
   `(progn ,@body))
@@ -565,7 +565,7 @@ the properties and "
     `(progn ,targ-form ,@type-forms)))
 
 ;;; Default declarations
-(declare-constraint nil (assert-constraint)
+(define-constraint nil (declare-constraint)
                     ;; Replicate the behavior for `progn'
                     ;; :value t
                     :value-fn
@@ -597,30 +597,30 @@ the properties and "
                         (unless (eql asserted-constraint (lookup *constraint-context* :constraint))
                           ;; Otherwise return the body
                           (cddr form)))))
-(declare-constraint nil (progn prog1 prog2)
+(define-constraint nil (progn prog1 prog2)
                     :value t)
-(declare-constraint nil (locally)
+(define-constraint nil (locally)
                     :value t
                     ;; :propagation-spec #'locally-propagation-spec
                     :expand #'locally-expansion)
-(declare-constraint nil (let)
+(define-constraint nil (let)
                     :expand nil
                     :propagation-spec #'let-propagation-spec)
-(declare-constraint nil (let)
+(define-constraint nil (let)
                     :expand #'let*-expansion)
-(declare-constraint nil (the)
+(define-constraint nil (the)
                     :value t
                     :propagation-spec #'the-propagation-spec)
-(declare-constraint nil (typecase etypecase)
+(define-constraint nil (typecase etypecase)
                     :value t
                     ;; :propagation-spec #'typecase-propagation-spec
                     :expand #'typecase-expansion)
-(declare-constraint nil (cond)
+(define-constraint nil (cond)
                     :value t
                     :propagation-spec #'cond-propagation-spec)
 
 ;;; Serapeum default declarations
-(declare-constraint nil (serapeum::truly-the)
+(define-constraint nil (serapeum::truly-the)
                     :value t
                     :propagation-spec #'the-propagation-spec)
 (defun with-subtype-dispatch-expansion (form env)
@@ -647,15 +647,15 @@ the properties and "
            ;;       (for type in (append possible-types `(,known-type)))
            ;;       (collecting `(,type ,@body))))
            ))))
-(declare-constraint nil (with-subtype-dispatch)
+(define-constraint nil (with-subtype-dispatch)
                     :expand #'with-subtype-dispatch-expansion)
 
 ;;; Non-mutating
-(declare-constraint :non-mutating nil :compare-fn #'cut-compare-fn)
-(declare-constraint :non-mutating (:atom))
-(declare-constraint :non-mutating (:symbol))
-(declare-constraint :non-mutating (print) :value-fn (lambda (form env) (declare (ignore env)) (if (third form) nil t)))
-(declare-constraint :non-mutating (
+(define-constraint :non-mutating nil :compare-fn #'cut-compare-fn)
+(define-constraint :non-mutating (:atom))
+(define-constraint :non-mutating (:symbol))
+(define-constraint :non-mutating (print) :value-fn (lambda (form env) (declare (ignore env)) (if (third form) nil t)))
+(define-constraint :non-mutating (
                                    ;; Control flow functions
                                    identity
                                    ;; List predicates
@@ -702,9 +702,9 @@ the properties and "
                                    ;; Numeric operators
                                    + - * /
                                    ))
-(declare-constraint :non-mutating (let) :expand nil :propagation-spec #'let-propagation-spec)
+(define-constraint :non-mutating (let) :expand nil :propagation-spec #'let-propagation-spec)
 
-(declare-constraint :non-mutating
+(define-constraint :non-mutating
                     (positive-fixnum-p negative-fixnum-p non-positive-fixnum-p non-negative-fixnum-p
                                        positive-integer-p negative-integer-p non-positive-integer-p non-negative-integer-p
                                        positive-rational-p negative-rational-p non-positive-rational-p non-negative-rational-p
@@ -712,10 +712,10 @@ the properties and "
                                        positive-float-p negative-float-p non-positive-float-p non-negative-float-p))
 
 ;;; Non-consing
-(declare-constraint :non-consing nil :compare-fn #'cut-compare-fn)
-(declare-constraint :non-consing (:atom))
-(declare-constraint :non-consing (:symbol))
-(declare-constraint :non-consing (
+(define-constraint :non-consing nil :compare-fn #'cut-compare-fn)
+(define-constraint :non-consing (:atom))
+(define-constraint :non-consing (:symbol))
+(define-constraint :non-consing (
                                   ;; Control flow functions
                                   identity
                                   ;; Destructive :non-consing operators
@@ -764,7 +764,7 @@ the properties and "
                                   ))
 ;;; Arithmetic operators are only non-consing for fixnum inputs and outputs
 ;;; NOTE: Is this fully correct?
-(declare-constraint :non-consing (+ - *)
+(define-constraint :non-consing (+ - *)
                     :value-fn
                     (lambda (form env)
                       (let ((form-type (strip-values-from-type (form-type form env)))
@@ -782,7 +782,7 @@ the properties and "
                          (choose-if (op (not (subtypep _ 'fixnum env))))
                          (scan 'list)
                          (cons form-type arg-types)))))
-(declare-constraint :non-consing (abs)
+(define-constraint :non-consing (abs)
                     :value-fn
                     (lambda (form env)
                       (*let ((targ (second form))
@@ -790,7 +790,7 @@ the properties and "
                         ;; If the expected type of the argument is a `fixnum',
                         ;; it can be negated without consing
                         (subtypep targ-type 'fixnum env))))
-(declare-constraint :non-consing (let) :expand nil :propagation-spec #'let-propagation-spec)
+(define-constraint :non-consing (let) :expand nil :propagation-spec #'let-propagation-spec)
 
 
 (comment

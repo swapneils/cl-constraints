@@ -10,7 +10,7 @@
    :defstar
    :cl-form-types)
   (:nicknames "constraints")
-  (:export #:declare-property #:declare-property*
-           #:undeclare-property
+  (:export #:define-property #:define-property*
+           #:undefine-property
            #:constrain
-           #:assert-constraint))
+           #:declare-constraint))

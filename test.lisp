@@ -80,7 +80,7 @@
               (or (= a b)
                   ;; For floats, also allow them to be "close enough"
                   (and (floatp a) (floatp b)
-                       (<= (assert-constraint :non-consing (abs c)) threshold)))))))
+                       (<= (declare-constraint :non-consing (abs c)) threshold)))))))
        t))
   (is
    (not
@@ -92,7 +92,7 @@
         (or (= a b)
             ;; For floats, also allow them to be "close enough"
             (and (floatp a) (floatp b)
-                 (<= (assert-constraint (:non-consing :value nil) (abs c)) threshold))))))))
+                 (<= (declare-constraint (:non-consing :value nil) (abs c)) threshold))))))))
   (is
    (no-constrain-errors
     (constrain :non-consing nil
@@ -102,7 +102,7 @@
        (or (= a b)
            ;; For floats, also allow them to be "close enough"
            (and (floatp a) (floatp b)
-                (<= (assert-constraint (:non-consing) (abs c)) threshold)))))))
+                (<= (declare-constraint (:non-consing) (abs c)) threshold)))))))
   (is
    (no-constrain-errors
     (constrain :non-consing nil
@@ -112,4 +112,4 @@
        (or (= a b)
            ;; For floats, also allow them to be "close enough"
            (and (floatp a) (floatp b)
-                (<= (assert-constraint :non-consing (abs c)) threshold))))))))
+                (<= (declare-constraint :non-consing (abs c)) threshold))))))))
