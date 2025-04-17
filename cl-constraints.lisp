@@ -217,13 +217,13 @@ the properties and "
         (unless valid
           (case report
             ;; TODO: Make a custom warning class
-            (:warn (warn "failed to constrain constraint ~A~%Form:~%~A~%Subforms with constraint not known to be true:~%~{~A~%~}~%"
+            (:warn (warn "failed to constrain ~S~%Form:~%~S~%Subforms with constraint not known to be true:~%~{~S~%~}~%"
                          constraint form
                          (sort (convert 'list (filter (op (not _2)) (lookup *constraint-context* :forms)) :pair-fn (op _2 _1))
                                #'<
                                :key (op (length (format nil "~A" _))))))
             ;; TODO: Make a custom error class
-            (:error (error "failed to constrain constraint ~A~%Form:~%~A~%Subforms with constraint not known to be true:~%~{~A~%~}~%"
+            (:error (error "failed to constrain ~S~%Form:~%~S~%Subforms with constraint not known to be true:~%~{~S~%~}~%"
                            constraint form
                            (sort (convert 'list (filter (op (not _2))
                                                         (lookup *constraint-context* :forms))
@@ -231,7 +231,7 @@ the properties and "
                                  #'<
                                  :key (op (length (format nil "~A" _))))))
             (otherwise
-             (warn "Invalid report configuration for `constrain' form!~%Report config: ~A~%Validity: ~A~%Form:~%~A~%"
+             (warn "Invalid report configuration for `constrain' form!~%Report config: ~S~%Validity: ~S~%Form:~%~S~%"
                    report
                    valid
                    form)))))
