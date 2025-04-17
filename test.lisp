@@ -115,4 +115,49 @@
                 (<= (declare-constraint :non-consing (abs c)) threshold)))))))
   (is
    (no-constrain-errors
-    (constrain :non-consing nil (rotatef (cdr c) (cdr b) c)))))
+    (constrain :non-consing nil (rotatef (cdr c) (cdr b) c))))
+  (is
+   (not
+    (no-constrain-errors
+     (constrain :non-mutating nil
+       (loop
+         for a from 1 to 10
+         for b in c
+         for d from 20
+         for e on '(1 2 3 4 5) by #'cddr
+         do (print d))))))
+  (is
+   (not
+    (no-constrain-errors
+     (constrain :non-consing nil
+       (loop
+         for a from 1 to 10
+         for b in c
+         for d from 20
+         for e on '(1 2 3 4 5) by #'cddr
+         do (print d))))))
+  (is
+   (no-constrain-errors
+    (constrain :non-mutating nil
+      (let* ((prop (cl-constraints::get-constraint constraint :atom))
+             (up-prop (fset:lookup prop :propagates))
+             (up-prop (or (eql up-prop :up)
+                          (and (listp up-prop)
+                               (member :up up-prop)))))
+        (return-from constrain-internal
+          (if up-prop
+              (values (cl-constraints::get-constraint-value constraint :atom form env) :atom)
+              (cl-constraints::get-constraint-value constraint :atom form env)))))))
+  (is
+   (not
+    (no-constrain-errors
+     (constrain :non-consing nil
+       (let* ((prop (cl-constraints::get-constraint constraint :atom))
+              (up-prop (fset:lookup prop :propagates))
+              (up-prop (or (eql up-prop :up)
+                           (and (listp up-prop)
+                                (member :up up-prop)))))
+         (return-from constrain-internal
+           (if up-prop
+               (values (cl-constraints::get-constraint-value constraint :atom form env) :atom)
+               (cl-constraints::get-constraint-value constraint :atom form env)))))))))

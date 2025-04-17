@@ -300,6 +300,8 @@ the properties and "
         ;; Use the new value of form
         (t (return))))
 
+    ;; (print (list "after-expansion" constraint form (when (listp form) (get-constraint-value constraint form form env))))
+
     (nest
      (flet* ((compare-constraint-values
               ((s1 (or symbol list)) v1 (s2 (or symbol list)) v2 &key (direction nil))
@@ -468,8 +470,7 @@ the properties and "
          (body (cdddr form))
          ;; (form-type (strip-values-from-type (form-type form env)))
          )
-    (setf env (augment-environment env
-                                   :variable vars))
+    (setf env (augment-environment env :variable vars))
     ;; Type-annotate the first bound value if we know the corresponding type
     ;; TODO: Figure out how to do this correctly, currently we don't know
     ;; if the variable will be overriden
@@ -649,7 +650,8 @@ the properties and "
 (define-constraint nil (setq)
                    :expand nil
                    :propagation-spec #'setq-propagation-spec)
-(define-constraint nil (the)
+(define-constraint nil (the
+                        #+sbcl '(sb-kernel:the*))
                    :expand nil
                    :propagation-spec #'the-propagation-spec)
 (define-constraint nil (typecase etypecase)
@@ -692,15 +694,54 @@ the properties and "
 
 ;;; Non-mutating
 (define-constraint :non-mutating nil :compare-fn #'cut-compare-fn)
+;;; cl-constraints non-mutating
+(define-constraint :non-mutating (get-constraint get-constraint-value))
+;;; CL non-mutating
+(define-constraint :non-mutating (setq) :value nil)
 (define-constraint :non-mutating (:atom))
 (define-constraint :non-mutating (:symbol))
+(define-constraint :non-mutating (tagbody)
+                   ;; Ignore `tagbody' tags for checking non-mutating
+                   :expand (lambda (form env)
+                             (declare (ignore env))
+                             (*let ((body (rest form))
+                                    (body (remove-if #'symbolp body)))
+                               `(progn ,@body))))
+(define-constraint :non-mutating (go)
+                   ;; Ignore `go' forms
+                   :expand (lambda (form env)
+                             (declare (ignore form env))
+                             `(progn)))
+(define-constraint :non-mutating (block)
+                   ;; Convert `block' to `progn'
+                   :expand (lambda (form env)
+                             (declare (ignore env))
+                             `(progn ,@(cddr form))))
+(define-constraint :non-mutating (return return-from)
+                   ;; Convert `return' / `return-from' to `progn'
+                   :expand (lambda (form env)
+                             (declare (ignore env))
+                             `(progn ,@(last form))))
+(define-constraint :non-mutating (values)
+                   ;; Check the values returned in `values'
+                   :propagation-spec
+                   (lambda (form env)
+                     (declare (ignore env))
+                     ;; each sub-form is a value
+                     (rest form)))
 (define-constraint :non-mutating (print) :value-fn (lambda (form env) (declare (ignore env)) (if (third form) nil t)))
+(define-constraint :non-mutating (member)
+                   :value-fn (lambda (form env)
+                               (declare (ignore env))
+                               ;; Only has the element and the collection
+                               (= (length form) 3)))
 (define-constraint :non-mutating (
                                   ;; Control flow functions
                                   identity
                                   if when unless
                                   ;; List predicates
                                   null
+                                  endp
                                   ;; Sequence predicates
                                   emptyp
                                   fset:sort
@@ -710,7 +751,9 @@ the properties and "
                                   zerop
                                   ;; Boolean predicates
                                   and or
+                                  equal eql eq
                                   ;; Type predicates
+                                  atom
                                   listp consp
                                   vectorp arrayp
                                   integerp rationalp floatp realp complexp numberp
@@ -743,9 +786,11 @@ the properties and "
                                   length elt
                                   ;; Numeric operators
                                   + - * /
+                                  1+ 1-
                                   ))
 (define-constraint :non-mutating (let) :expand nil :propagation-spec #'let-propagation-spec)
 
+;;; Alexandria non-mutating
 (define-constraint :non-mutating
     (positive-fixnum-p negative-fixnum-p non-positive-fixnum-p non-negative-fixnum-p
      positive-integer-p negative-integer-p non-positive-integer-p non-negative-integer-p
@@ -753,10 +798,48 @@ the properties and "
      positive-real-p negative-real-p non-positive-real-p non-negative-real-p
      positive-float-p negative-float-p non-positive-float-p non-negative-float-p))
 
+;;; FSet non-mutating
+(define-constraint :non-mutating
+    (lookup))
+
 ;;; Non-consing
 (define-constraint :non-consing nil :compare-fn #'cut-compare-fn)
 (define-constraint :non-consing (:atom))
 (define-constraint :non-consing (:symbol))
+(define-constraint :non-consing (tagbody)
+                   ;; Ignore `tagbody' tags for checking non-mutating
+                   :expand (lambda (form env)
+                             (declare (ignore env))
+                             (*let ((body (rest form))
+                                    (body (remove-if #'symbolp body)))
+                               `(progn ,@body))))
+(define-constraint :non-consing (go)
+                   ;; Ignore `go' forms
+                   :expand (lambda (form env)
+                             (declare (ignore form env))
+                             `(progn)))
+(define-constraint :non-consing (block)
+                   ;; Convert `block' to `progn'
+                   :expand (lambda (form env)
+                             (declare (ignore env))
+                             `(progn ,@(cddr form))))
+(define-constraint :non-consing (return return-from)
+                   ;; Convert `return' / `return-from' to `progn'
+                   :expand (lambda (form env)
+                             (declare (ignore env))
+                             `(progn ,@(last form))))
+(define-constraint :non-consing (values)
+                   ;; Check the values returned in `values'
+                   :propagation-spec
+                   (lambda (form env)
+                     (declare (ignore env))
+                     ;; each sub-form is a value
+                     (rest form)))
+(define-constraint :non-consing (member)
+                   :value-fn (lambda (form env)
+                               (declare (ignore env))
+                               ;; Only has the element and the collection
+                               (= (length form) 3)))
 (define-constraint :non-consing (
                                  ;; Control flow functions
                                  identity
@@ -771,6 +854,7 @@ the properties and "
                                  nsplice-seq nsplice-seqf
                                  ;; List predicates
                                  null
+                                 endp
                                  ;; Vector predicates
                                  array-in-bounds-p array-has-fill-pointer-p
                                  #+sbcl '(sb-kernel:array-type-p
@@ -781,7 +865,10 @@ the properties and "
                                  < <= > >= =
                                  ;; Boolean predicates
                                  and or
+                                 ;; equal
+                                 eql eq
                                  ;; Type predicates
+                                 atom
                                  listp consp
                                  vectorp arrayp
                                  integerp rationalp floatp realp complexp numberp
@@ -793,8 +880,7 @@ the properties and "
                                  nth nthcdr
                                  rplaca rplacd
                                  #+sbcl '(sb-kernel:%rplaca
-                                          sb-kernel:%rplacd
-                                          )
+                                          sb-kernel:%rplacd)
                                  ;; car and friends
                                  (iter outer (for len from 1 to 5)
                                    (iter
