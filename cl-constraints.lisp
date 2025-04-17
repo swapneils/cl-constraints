@@ -906,21 +906,35 @@ the properties and "
 (define-constraint :non-consing (+ - *)
                    :value-fn
                    (lambda (form env)
-                     (let ((form-type (strip-values-from-type (form-type form env)))
-                           (arg-types (nest
-                                       (collect 'list)
-                                       (map-fn '(or symbol list null) #'strip-values-from-type)
-                                       (map-fn '(or symbol list null) (rcurry #'form-type env))
-                                       (scan 'list)
-                                       (rest form))))
-                       (nest
-                        ;; If any type is invalid, return false
-                        (not)
-                        (collect 'list)
-                        ;; Find types which are INVALID for :non-consing
-                        (choose-if (op (not (subtypep _ 'fixnum env))))
-                        (scan 'list)
-                        (cons form-type arg-types)))))
+                     (or
+                      ;; If the form is constant we should assume
+                      ;; the smarter compilers will optimize it away
+                      #+sbcl
+                      (constantp form env)
+                      (let ((form-type (strip-values-from-type (form-type form env)))
+                            (arg-types (nest
+                                        (collect 'list)
+                                        (map-fn '(or symbol list null) #'strip-values-from-type)
+                                        (map-fn '(or symbol list null) (rcurry #'form-type env))
+                                        (scan 'list)
+                                        (rest form))))
+                        (nest
+                         ;; If any type is invalid, return false
+                         (not)
+                         (collect 'list)
+                         ;; Find types which are INVALID for :non-consing
+                         (choose-if (op (not (subtypep _ 'fixnum env))))
+                         (scan 'list)
+                         (cons form-type arg-types))))))
+(define-constraint :non-consing (/)
+                   ;; Only if it is known at runtime
+                   ;; and the compiler is smart
+                   ;; enough we expect it to realize that
+                   :value-fn
+                   (lambda (form env)
+                     (or
+                      #+sbcl
+                      (constantp form env))))
 (define-constraint :non-consing (abs)
                    :value-fn
                    (lambda (form env)
