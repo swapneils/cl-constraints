@@ -64,8 +64,8 @@ from seeing their internals..."
    ;; TODO: Figure out how to handle cases where the expansion is type-able
    ;; but the original function's type isn't recognized by cl-form-types,
    ;; so it's treated as `t' when being called by enclosing
-   ;; NOTE: Probably this is something that needs to be fixed in `constrain-internal'
-   ;; to propagate the type info even when cl-form-types can't for whatever reason...
+   ;; NOTE: Investigated this, looks like it's an issue with the type propagation
+   ;; within `constrain-internal' rather than the implementation.
    `(let (,(iter
              (for name in lambda-args)
              (for val in args)
@@ -296,6 +296,8 @@ NOTE: `:infer-types' currently has no effect."
                    valid
                    form)))))
     constrain-form))
+;; TODO: Figure out how to call `constrain-internal' in-place via a macro
+;; so I don't ever have to use `augment-environment' myself; it's a recipe for disaster.
 (defun* constrain-internal ((constraint symbol) (config map) original-form env
                             &optional propagate-down propagate-down-value
                             &aux
