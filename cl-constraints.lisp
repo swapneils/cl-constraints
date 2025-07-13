@@ -247,7 +247,7 @@ Defaults to the `cdr' of `form'"
   (declare (ignore constraint))
   `(progn ,@body))
 
-(defmacro constrain (&whole form constraint (&key (report :warn)) &body body &environment env)
+(defmacro constrain (&whole form constraint (&key (report :warn) (infer-types t)) &body body &environment env)
   "Constrains `body' to have constraint `constraint'.
 `body' is considered to be an implicit progn form. Note that this `progn' is taken
 into account for constraint propagation.
@@ -258,14 +258,19 @@ into account for constraint propagation.
 the constraint is null
 - If a 1-arg function, that function is called with the top level value of the
 constraint to create a response. The return values of this function are ignored.
-Note that if `body' has multiple forms, the result of `compare-fn'
-the properties and "
+Note that if `body' has multiple forms, the result of `compare-fn' are used
+to combine them together as if in a `progn'.
+
+NOTE: `:infer-types' currently has no effect."
   (let* ((constrain-form (if (> (length body) 1)
                              `(progn ,@body)
                              (first body)))
          ;; Refresh `*constraint-context*'
          (*constraint-context* (map (:constraint constraint)
-                                    (:forms (map))))
+                                    (:forms (map))
+                                    (:infer-types infer-types)))
+         ;; Localize `*symbol-db*' for search-specific inference attempts
+         (*symbol-db* *symbol-db*)
          (valid (constrain-internal constraint (map) constrain-form env)))
     (if (functionp report)
         (funcall report valid)
@@ -658,6 +663,8 @@ the properties and "
     `(progn ,targ-form ,@type-forms)))
 
 ;;; Default declarations
+;;; TODO: Add `constrain' similarly to declare-constraint,
+;;; rather than hardcoding ignorance of it into `constrain-internal'
 (define-constraint nil (declare-constraint)
                    ;; Replicate the behavior for `progn'
                    ;; :value t
@@ -675,6 +682,7 @@ the properties and "
                            (setf asserted-value (getf keys-plist :value
                                                       ;; Default to the current value
                                                       asserted-value))))
+                       ;; TODO: Figure out how this should work for parameterized constraints
                        (when (eql asserted-constraint (lookup *constraint-context* :constraint))
                          (setf value asserted-value))
                        value))
@@ -747,6 +755,8 @@ the properties and "
 (define-constraint nil (with-subtype-dispatch)
                    :expand #'with-subtype-dispatch-expansion)
 
+;;; FIXME: Do we want `non-mutating' to include variable setting,
+;;; as it currently does? Or specifically mutating existing objects?
 ;;; Non-mutating
 (define-constraint :non-mutating nil :compare-fn #'cut-compare-fn)
 ;;; cl-constraints non-mutating
@@ -855,7 +865,9 @@ the properties and "
 
 ;;; FSet non-mutating
 (define-constraint :non-mutating
-    (lookup))
+    (lookup
+     equal?
+     convert))
 
 ;;; Non-consing
 (define-constraint :non-consing nil :compare-fn #'cut-compare-fn)
