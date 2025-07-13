@@ -9,7 +9,8 @@
       (second form-type)
       form-type))
 
-(defun make-ignore-compare-fn (ignored-syms)
+(defun* make-ignore-compare-fn ((ignored-syms list))
+  (:returns function)
   (lambda (v1 v2 c)
     (if (member (lookup c :current-symbol) ignored-syms)
         v2
@@ -19,22 +20,75 @@
         ;; to reduce chaos.
         (or v2 v1))))
 
+(defun default-expand-fn (form env)
+  "For functions with `symbol-function' bindings (rather than local ones),
+this `:expand' spec tries to access their function bodies and determine whether
+they fulfill the current constraint.
+
+NOTE: Not currently in use, as there are issues with the inbuilt type-propagation
+(at least in SBCL) which don't specify the type as tightly as we do via the above
+pseudo-inlining _even for inline functions_
+
+TODO: Add filtering so we only use this logic for inline functions?
+Not sure notinline/non-inline functions reliably use the same type you would infer
+from seeing their internals..."
+  (nest
+   (let ((expanded-form (macroexpand form env))))
+   (if-not (equal form expanded-form) expanded-form)
+   (let ((sym (car form))
+         (args (cdr form))))
+   (multiple-value-bind
+         (symtype local-func)
+       (trivial-cltl2:function-information sym env))
+   ;; Fallback if it's not a function
+   (if-not (eql symtype :function) expanded-form)
+   ;; Fallback if it's locally defined
+   (if local-func expanded-form)
+   (let* ((lambda-form (function-lambda-expression (symbol-function sym)))
+          (lambda-keyword (first lambda-form))
+          (lambda-args (second lambda-form))
+          (lambda-body (cddr lambda-form))))
+   ;; Fallback if the lambda returned has an unexpected format
+   (if-not (and (equal lambda-keyword 'cl:lambda)
+                (listp lambda-args))
+           expanded-form)
+   ;; TODO: Handle the advanced lambda list params
+   (if (or (some #'keywordp lambda-args)
+           (intersectionp '(&key &optional &aux) lambda-args))
+       expanded-form)
+   ;; Expand the function as a let-bound inlined function
+   ;; FIXME: The behavior for functions which invoke lexical
+   ;; variables from their defining context is undefined
+   ;; FIXME: The behavior for functions which invoke lexical
+   ;; variables from their defining context is undefined
+   ;; TODO: Figure out how to handle cases where the expansion is type-able
+   ;; but the original function's type isn't recognized by cl-form-types,
+   ;; so it's treated as `t' when being called by enclosing
+   ;; NOTE: Probably this is something that needs to be fixed in `constrain-internal'
+   ;; to propagate the type info even when cl-form-types can't for whatever reason...
+   `(let (,(iter
+             (for name in lambda-args)
+             (for val in args)
+             (collecting (list name val))))
+      ,@lambda-body)))
 
 ;; Each symbol has a map by default
-(defparameter *symbol-db* (map :default
-                               (map :default
-                                    (map (:expand t)
-                                         (:propagation-spec (lambda (form env)
-                                                              (declare (ignore env))
-                                                              (cdr form)))
-                                         (:propagation-type t)))))
+(defparameter *symbol-db*
+  (map :default
+       (map :default
+            (map (:expand t)
+                 (:propagation-spec (lambda (form env)
+                                      (declare (ignore env))
+                                      (cdr form)))
+                 (:propagation-type t)))))
 
-(defparameter *defaults* (map :default
-                              (map (:expand t)
-                                   (:propagation-spec (lambda (form env)
-                                                        (declare (ignore env))
-                                                        (cdr form)))
-                                   (:propagation-type t))))
+(defparameter *defaults*
+  (map :default
+       (map (:expand t)
+            (:propagation-spec (lambda (form env)
+                                 (declare (ignore env))
+                                 (cdr form)))
+            (:propagation-type t))))
 
 (defun* get-constraint (constraint (target (or symbol list)))
   (:returns map)
@@ -85,7 +139,7 @@ it exist and be called."
                                (value-fn nil value-fn-provided-p)
                                (propagates :up)
                                (compare-fn nil compare-fn-provided-p)
-                               (expand t)
+                               (expand t expand-provided-p)
                                (propagation-spec nil propagation-spec-provided-p)
                                (propagation-type t))
   "Declares `symbols' to have constraint `constraint', which applies
@@ -146,7 +200,6 @@ for propagation. It contains a function which takes in `form' and `env'
 and returns a list of subforms.
 Defaults to the `cdr' of `form'"
   `(let ((new-map (map (:propagates ,propagates)
-                       (:expand ,expand)
                        (:propagation-type ',propagation-type)))
          (symbols (apply
                    #'concatenate 'list
@@ -160,6 +213,8 @@ Defaults to the `cdr' of `form'"
         (setf (lookup new-map :value) ,value))
        (,(and symbols (not value-provided-p))
         (setf (lookup new-map :value-fn) ,value-fn)))
+     (when ,expand-provided-p
+       (setf (lookup new-map :expand) ,expand))
      (when ,compare-fn-provided-p
        (setf (lookup new-map :compare-fn) ,compare-fn))
      (when ,propagation-spec-provided-p
